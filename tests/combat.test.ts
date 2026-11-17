@@ -1,0 +1,8 @@
+import {describe,it,expect} from 'vitest';
+import {Combat,WORLD} from '../src/combat';
+describe('battle simulation',()=>{
+ it('normalizes diagonal movement and bounds the player',()=>{const a=new Combat('hazel',1),b=new Combat('hazel',1);a.step(1/60,{x:1,y:0});b.step(1/60,{x:1,y:1});expect(Math.hypot(a.player.x-900,a.player.y-600)).toBeCloseTo(Math.hypot(b.player.x-900,b.player.y-600));for(let i=0;i<500;i++)a.step(1/60,{x:1,y:1});expect(a.player.x).toBeLessThanOrEqual(WORLD.width-35);});
+ it('does not advance while an upgrade is pending',()=>{const b=new Combat('hazel',3);b.pendingLevels=1;b.step(1/60,{x:1,y:0});expect(b.seconds).toBe(0);b.resolveLevel('leaf');b.step(1/60,{x:0,y:0});expect(b.seconds).toBeGreaterThan(0);expect(b.build.leaf).toBe(1);});
+ it('spawns a boss once and expires a run',()=>{const b=new Combat('hazel',1);b.seconds=359.99;b.step(.02,{x:0,y:0});expect(b.enemies.filter(e=>e.kind==='boss')).toHaveLength(1);b.seconds=479.99;b.step(.02,{x:0,y:0});expect(b.ended).toBe(true);expect(b.won).toBe(false);});
+ it('keeps dense multi-skill combat bounded and finite',()=>{const b=new Combat('hazel',43);b.build={spark:5,spore:5,leaf:5,ember:5,haste:4,power:4};b.player.hp=b.player.maxHp=100000;for(let i=0;i<120;i++)b.spawn('slime',820+i%12*14,500+Math.floor(i/12)*14);for(let t=0;t<3600;t++){b.pendingLevels=0;b.step(1/60,{x:Math.cos(t/100),y:Math.sin(t/100)});}expect(b.kills).toBeGreaterThan(50);expect(b.shots.length).toBeLessThanOrEqual(280);expect(b.zones.length).toBeLessThanOrEqual(45);expect(Number.isFinite(b.player.hp)).toBe(true);expect(Object.values(b.damageByWeapon).every(Number.isFinite)).toBe(true);});
+});
