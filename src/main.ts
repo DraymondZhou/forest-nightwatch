@@ -7,8 +7,8 @@ import { BattleHud } from './battleHud';
 import {DIFFICULTIES,readDifficulty,type Difficulty} from './difficulty';
 import { Combat } from './combat';
 import { ForestScene } from './scene';
-import { ABILITIES, ACHIEVEMENTS, CHARACTERS, SYNERGIES, ability, type CharacterId, type UpgradeId } from './content';
-import { SaveStore, characterUnlocked, finishRun, unlockedWeapons, upgradeChoices, xpNeeded } from './model';
+import { CLASS_TALENTS, MASTERY_LEVEL, MASTERIES, ABILITIES, ACHIEVEMENTS, CHARACTERS, SYNERGIES, ability, type CharacterId, type UpgradeId } from './content';
+import { SaveStore, characterUnlocked, finishRun, unlockedWeapons, xpNeeded } from './model';
 
 const store = new SaveStore({
   getItem: key => localStorage.getItem(key),
@@ -16,7 +16,7 @@ const store = new SaveStore({
 });
 const audio = new AudioDirector();
 const app = document.querySelector<HTMLDivElement>('#app')!;
-app.innerHTML = '<div id="world"></div><section id="hud" hidden><div id="wound" aria-hidden="true"><svg viewBox="0 0 120 72" focusable="false"><g fill="#8c333e"><path d="M120 5c-9 1-7 9-18 10l-9 0 6 4-8 3 8 2c9 1 8 7 21 4zM120 40c-8-3-12-2-17 2l-11 2 6 4-10 7 15-3c6-2 10 4 17 2z"/><ellipse cx="81" cy="23" rx="4" ry="2"/><ellipse cx="73" cy="32" rx="2" ry="1.4"/><ellipse cx="84" cy="51" rx="3" ry="1.6"/></g></svg></div><div class="vitals"><span id="health"></span><meter id="hp"></meter><meter id="xp"></meter></div><b id="clock"></b><button id="pause" aria-label="暂停">Ⅱ</button><div id="skills"></div><output id="perf"></output><div id="boss"></div><div id="objective"></div><button id="dash" aria-label="叶步闪避" title="叶步 · 空格"><span>叶步</span><small id="dash-time">就绪</small></button></section><section id="panel"></section><aside id="orientation">请旋转手机，横屏游戏</aside>';
+app.innerHTML = '<div id="world"></div><section id="hud" hidden><div id="wound" aria-hidden="true"><svg viewBox="0 0 120 72" focusable="false"><g fill="#8c333e"><path d="M120 5c-9 1-7 9-18 10l-9 0 6 4-8 3 8 2c9 1 8 7 21 4zM120 40c-8-3-12-2-17 2l-11 2 6 4-10 7 15-3c6-2 10 4 17 2z"/><ellipse cx="81" cy="23" rx="4" ry="2"/><ellipse cx="73" cy="32" rx="2" ry="1.4"/><ellipse cx="84" cy="51" rx="3" ry="1.6"/></g></svg></div><div class="vitals"><span id="health"></span><meter id="hp"></meter><meter id="xp"></meter><small id="mastery"></small></div><b id="clock"></b><button id="pause" aria-label="暂停">Ⅱ</button><div id="skills"></div><output id="perf"></output><div id="boss"></div><div id="objective"></div><button id="dash" aria-label="叶步闪避" title="叶步 · 空格"><span>叶步</span><small id="dash-time">就绪</small></button></section><section id="panel"></section><aside id="orientation">请旋转手机，横屏游戏</aside>';
 const el = <T extends HTMLElement = HTMLElement>(id:string) => document.getElementById(id) as T;
 const panel = el('panel'), hud = el('hud');
 const battleHud=new BattleHud();
@@ -39,7 +39,7 @@ function select() {
   page='select';
   const cards=CHARACTERS.map(c=>{
     const open=characterUnlocked(store.data,c.id);
-    return `<button class="card" data-action="play-${c.id}" ${open?'':'disabled'}><b class="rune">${ability(c.weapon).icon}</b><small>${c.title}</small><strong>${c.name}</strong><span>${open?c.description.split('\n')[0]:c.unlock}</span></button>`;
+    return `<button class="card" data-action="play-${c.id}" ${open?'':'disabled'}><b class="rune">${ability(c.weapon).icon}</b><small>${c.title}</small><strong>${c.name}</strong><span>${open?c.description.split('\n')[0]:c.unlock}</span><span class="mastery-tip">${MASTERY_LEVEL} 级 · ${MASTERIES[c.id].name}<br>${MASTERIES[c.id].tip}</span></button>`;
   }).join('');
   const difficulty=store.data.settings.difficulty;
   const modes=(Object.keys(DIFFICULTIES) as Difficulty[]).map(id=>`<label><input type="radio" name="difficulty" data-key="difficulty" value="${id}" ${id===difficulty?'checked':''}><span>${DIFFICULTIES[id].label}</span></label>`).join('');
@@ -92,13 +92,20 @@ function afterChoice(){
 function upgrade(){
   if(!run)return;
   page='upgrade';scene.setPaused(true);audio.play('level');
-  const choices=upgradeChoices(run.build,unlockedWeapons(store.data),run.rng);
+  const choices=run.levelOptions(unlockedWeapons(store.data));
   const cards=choices.map(id=>{
+    if(id==='mastery'){
+      const c=run!.character,talent=CLASS_TALENTS[c.id];
+      return `<button class="card" data-action="take-mastery" style="--accent:${c.color}"><b class="rune">${ability(c.weapon).icon}</b><small>${c.name}专属</small><strong>${talent.name}</strong><span>${talent.description}</span></button>`;
+    }
     const a=ability(id), level=run!.build[id]??0;
     const synergy=SYNERGIES.find(s=>(s.a===id&&run!.build[s.b])||(s.b===id&&run!.build[s.a]));
     return `<button class="card" data-action="take-${id}" style="--accent:${a.color}"><b class="rune">${a.icon}</b><small>${level?'等级 '+level+' → '+(level+1):'习得'+(a.kind==='weapon'?'魔法':'祝福')}</small><strong>${a.name}</strong><span>${a.description}</span>${synergy?`<em>${synergy.name}</em>`:''}</button>`;
   }).join('');
-  sheet('选择一项祝福',`<div class="cards">${cards||action('take-heal','恢复 20 生命',true)}</div>`,'');
+  const awakened=run.level-run.pendingLevels+1===MASTERY_LEVEL;
+  const specialty=MASTERIES[run.character.id];
+  const notice=awakened?`<p class="mastery-notice">专精已开启 · <b>${specialty.name}</b>　${specialty.tip}</p>`:'';
+  sheet('选择一项祝福',`${notice}<div class="cards">${cards||action('take-heal','恢复 20 生命',true)}</div>`,'');
 }
 function end(){
   if(!run||page==='result')return;
@@ -116,6 +123,11 @@ function updateHealth(s:Combat){
 }
 function updateHud(s:Combat,stats:FrameStats) {
   battleHud.update(s);updateHealth(s);
+  const mastery=el('mastery');
+  const status=!s.masteryActive?'':s.character.id==='hazel'?'游雷 · '+Math.floor(s.stormCharge*100)+'%':
+    s.character.id==='ash'?(s.dashCooldown<=0?'焰枪 · 就绪':'焰枪 · 冷却'):
+    (s.zones.some(z=>z.kind==='spore' && z.timer>=1 && !z.bloomed)?'根阵 · 可开花':'根阵 · 育孢');
+  if(mastery.textContent!==status)mastery.textContent=status;
   el<HTMLMeterElement>('xp').value=s.xp/xpNeeded(s.level);
   el('clock').textContent=clock(s.seconds);el('perf').textContent=store.data.settings.showFps?`实际 ${Math.round(stats.current)||"—"} · 平均 ${Math.round(stats.average)||"—"} · 1% Low ${Math.round(stats.low)||"—"} FPS`:'';
   const skills=ABILITIES.filter(a=>s.build[a.id]).map(a=>`<i style="color:${a.color}" title="${a.name}">${a.icon} <small>${s.build[a.id]}</small></i>`).join('');
@@ -129,7 +141,7 @@ panel.onclick=e=>{
   else if(id==='resume')resume();else if(id==='pause')pause();else if(id==='retreat')end();
   else if(id.startsWith('play-'))start(id.slice(5) as CharacterId);
   else if((id==='gift-flame'||id==='gift-spring')&&run&&page==='gift'){run.takeGift(id==='gift-flame'?'flame':'spring');afterChoice();}
-  else if(id.startsWith('take-')&&run&&page==='upgrade'){run.resolveLevel(id==='take-heal'?undefined:id.slice(5) as UpgradeId);afterChoice();}
+  else if(id.startsWith('take-')&&run&&page==='upgrade'){run.resolveLevel(id==='take-heal'?undefined:id.slice(5) as UpgradeId|'mastery');afterChoice();}
   else if(id==='import')el('import').click();
   else if(id==='export'){const url=URL.createObjectURL(new Blob([JSON.stringify(store.data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='forest-nightwatch-save.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}
 };

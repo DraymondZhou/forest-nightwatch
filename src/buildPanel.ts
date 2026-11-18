@@ -1,5 +1,5 @@
 import type { Combat } from './combat';
-import { ABILITIES, ability, type Ability, type WeaponId } from './content';
+import { CLASS_TALENTS, MASTERIES, MASTERY_LEVEL, ABILITIES, ability, type Ability, type WeaponId } from './content';
 import { activeSynergies, xpNeeded } from './model';
 
 const decimal = (n:number, digits=1) => String(Number(n.toFixed(digits)));
@@ -41,6 +41,6 @@ export function buildPanel(run:Combat,time:string) {
       <h3>被动天赋</h3>${group('passive')||'<p class="build-empty">尚未选择被动天赋</p>'}
       </section>
       <section><h3>当前数值</h3><dl class="stat-list">${stats.map(([name,value])=>`<div><dt>${name}</dt><dd>${value}</dd></div>`).join('')}</dl>
-      ${gifts}<p class="character-trait">${run.character.description.split('\n')[0]}</p><h3>已激活联动</h3>${links||'<p class="build-empty">暂无联动</p>'}</section>
+      ${gifts}<p class="character-trait">${run.character.description.split('\n')[0]}</p><h3>${MASTERIES[run.character.id].name} · ${run.masteryActive?'专精已生效':MASTERY_LEVEL+' 级开启'}</h3><p>${MASTERIES[run.character.id].details}</p>${run.classTalent?`<p><b>${CLASS_TALENTS[run.character.id].name}</b> · ${CLASS_TALENTS[run.character.id].description}</p>`:''}<h3>已激活联动</h3>${links||'<p class="build-empty">暂无联动</p>'}</section>
     </div></div>`;
 }

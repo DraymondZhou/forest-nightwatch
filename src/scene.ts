@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import {drawLightning,shapeLightning} from './lightning';
 import {FrameStats} from './frameStats';
 import hurtFaces from './hurt-faces.json';
 import {InkMarks,MARK} from './marks';
@@ -15,7 +16,7 @@ import {WitchRig} from './rig';
 import type {AudioDirector} from './audio';
 
 const TINT:Record<string,number>={spark:0xa0ecdf,spore:0xc4d599,leaf:0xe2d79b,ember:0xf2b17a,frost:0xb8d9ef,comet:0xd2b0e5,enemy:0xf29483};
-type VisualEffect=Effect&{life:number;max:number;fromWand?:boolean};
+type VisualEffect=Effect&{life:number;max:number;fromWand?:boolean;arc?:ReturnType<typeof shapeLightning>};
 export interface SceneHooks {tick:(sim:Combat,stats:FrameStats)=>void;health:(sim:Combat)=>void;showFps:()=>boolean;upgrade:()=>void;gift:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean;showEnemyHealth:()=>boolean;showEnemyHealthNumbers:()=>boolean}
 export class ForestScene extends Phaser.Scene {
   sim?:Combat;running=false;private hooks:SceneHooks;
@@ -126,6 +127,14 @@ export class ForestScene extends Phaser.Scene {
         continue;
       }
       const fromWand=effect.kind==='chain' && effect.x===this.sim!.player.x && effect.y===this.sim!.player.y;
+      if(effect.kind==='chain'){
+        if(this.effects.length<100){
+          const delay=(effect.hop??0)*.018,life=.26+delay;
+          const arc=shapeLightning(effect.arcSeed??0,Math.hypot(effect.tx!-effect.x,effect.ty!-effect.y));
+          this.effects.push({...effect,life,max:life,fromWand,arc,y:effect.y-10,ty:effect.ty!-10});
+        }
+        continue;
+      }
       if(effect.kind==='defeat'){this.showDefeat(effect);continue;}
       if(effect.kind==='gather'){
         if(this.sim!.seconds-this.lastGather<.12)continue;
@@ -142,7 +151,7 @@ export class ForestScene extends Phaser.Scene {
         if(!this.hooks.lowQuality()){const t=this.texts[this.textCursor++%this.texts.length];this.tweens.killTweensOf(t);t.setPosition(effect.x,effect.y-24).setText(effect.kind==='evade'?'险避':effect.text??'').setVisible(true).setAlpha(1).setColor(effect.kind==='evade'?'#bde7ca':'#f0ddb6');this.tweens.add({targets:t,y:t.y-25,alpha:0,duration:500,onComplete:()=>t.setVisible(false)});}
 
       }else if(effect.kind==='heal')this.hooks.audio.play('heal');
-      if(effect.kind!=='hit'&&effect.kind!=='wound'&&this.effects.length<100){const life=effect.kind==='dash'?.25:effect.kind==='evade'?.32:effect.kind==='strike'?.18:effect.kind==='chain'?.18:effect.kind==='gather'?.22:.5;this.effects.push({...effect,life,max:life,fromWand});}
+      if(effect.kind!=='hit'&&effect.kind!=='wound'&&this.effects.length<100){const life=effect.kind==='dash'?.25:effect.kind==='evade'?.32:effect.kind==='strike'?.18:effect.kind==='gather'?.22:.5;this.effects.push({...effect,life,max:life,fromWand});}
     }
   }
   private showDefeat(effect: Effect) {
@@ -186,7 +195,13 @@ export class ForestScene extends Phaser.Scene {
     for(const z of sim.zones){
       if(!visible(z.x,z.y,z.radius))continue;
       if(z.kind==='warning'){g.fillStyle(0xd66d61,.1+.12*Math.sin(z.timer*15)**2);g.fillCircle(z.x,z.y,z.radius);g.lineStyle(3,0xf3a087,.85);g.strokeCircle(z.x,z.y,z.radius);g.lineStyle(2,0xf3a087,.5);g.strokeCircle(z.x,z.y,z.radius*Math.min(1,z.timer/1.3));}
-      else{g.fillStyle(z.kind==='spore'?0xa1b97b:0xde9d60,.13);g.fillCircle(z.x,z.y,z.radius);g.lineStyle(1,z.kind==='spore'?0xb7cf94:0xf2b17a,.32);g.strokeCircle(z.x,z.y,z.radius);for(let i=0;i<5;i++){const a=i/5*Math.PI*2+z.id;const x=z.x+Math.cos(a)*z.radius*.6,y=z.y+Math.sin(a)*z.radius*.6;this.fieldMarks.paint(MARK.spore,x,y,16+(i%2)*4,.14*Math.sin(sim.seconds*2+i),.86);}}
+      else{
+        if(z.kind==='spore' && sim.character.id==='fern' && sim.masteryActive && !z.bloomed){
+          const size=Math.min(1,z.timer);
+          g.lineStyle(2,0xbadb98,.65);g.beginPath();g.arc(z.x,z.y,z.radius,-Math.PI/2,-Math.PI/2+size*Math.PI*2);g.strokePath();
+          this.fieldMarks.paint(MARK.leaf,z.x,z.y,15+9*size,0,.85);
+        }
+        g.fillStyle(z.kind==='spore'?0xa1b97b:0xde9d60,.13);g.fillCircle(z.x,z.y,z.radius);g.lineStyle(1,z.kind==='spore'?0xb7cf94:0xf2b17a,.32);g.strokeCircle(z.x,z.y,z.radius);for(let i=0;i<5;i++){const a=i/5*Math.PI*2+z.id;const x=z.x+Math.cos(a)*z.radius*.6,y=z.y+Math.sin(a)*z.radius*.6;this.fieldMarks.paint(MARK.spore,x,y,16+(i%2)*4,.14*Math.sin(sim.seconds*2+i),.86);}}
     }
     this.pickups.draw(sim,view);
     const living=this.visibleEnemies;living.clear();
@@ -218,6 +233,11 @@ export class ForestScene extends Phaser.Scene {
         const ux=Math.cos(aim),uy=Math.sin(aim);
         g.lineBetween(enemy.x+ux*enemy.radius,enemy.y+uy*enemy.radius,enemy.x+ux*(enemy.radius+20+28*t),enemy.y+uy*(enemy.radius+20+28*t));
       }
+      if(enemy.rooted>0){
+        const radius=enemy.radius*.85;
+        g.lineStyle(2,0xb1cb83,.85);g.strokeEllipse(enemy.x,enemy.y+4,radius*2,radius*.66);
+        this.fieldMarks.paint(MARK.leaf,enemy.x-radius*.65,enemy.y+3,14,-.65,.9);
+      }
       if(enemy.frozen>0)this.fieldMarks.paint(MARK.frost,enemy.x,enemy.y+4,enemy.radius*2);
       if(enemy.spore>0){g.fillStyle(0xd4e59c,.8);g.fillCircle(enemy.x+10,enemy.y-18,3);}
     }
@@ -226,6 +246,12 @@ export class ForestScene extends Phaser.Scene {
       if(!visible(shot.x,shot.y,36))continue;
       const angle=Math.atan2(shot.vy,shot.vx);
       if(!this.hooks.lowQuality()){g.lineStyle(shot.weapon==='comet'?4:2,TINT[shot.weapon],.38);g.lineBetween(shot.x,shot.y,shot.x-shot.vx*.055,shot.y-shot.vy*.055);}
+      if(shot.lance){
+        const ux=Math.cos(angle),uy=Math.sin(angle);
+        g.fillStyle(0xf49656,.85);
+        g.fillTriangle(shot.x+ux*13,shot.y+uy*13,shot.x-ux*37-uy*5,shot.y-uy*37+ux*5,shot.x-ux*22+uy*6,shot.y-uy*22-ux*6);
+        g.lineStyle(2,0xffde86,1);g.lineBetween(shot.x-ux*42,shot.y-uy*42,shot.x+ux*13,shot.y+uy*13);
+      }
       this.fieldMarks.paint(MARK[shot.weapon],shot.x,shot.y,shot.weapon==='comet'?32:shot.weapon==='enemy'?22:27,angle);
     }
     const p=sim.player;g.fillStyle(0x0b2926,.5);g.fillEllipse(p.x,p.y+21,35,13);if(sim.dashTime>0){g.lineStyle(1,0xcbe5b2,.55);g.strokeEllipse(p.x,p.y+16,39,12);}
@@ -234,6 +260,11 @@ export class ForestScene extends Phaser.Scene {
   }
   private drawEffects(dt:number){const g=this.fxInk;g.clear();this.hitMarks.begin();for(const e of this.effects){e.life-=dt;if(e.life<=0)continue;const alpha=e.life/e.max;g.lineStyle(e.kind==='chain'?3:2,e.color??0xc8dcac,alpha*.8);if(e.kind==='cast'){
         const tip=this.rig!.wandTip(),r=2+alpha*3;
+        if(e.weapon==='spark'){
+          const radius=4+7*(1-alpha);
+          g.lineStyle(1.5,0xb8fbe5,alpha);g.strokeCircle(tip.x,tip.y,radius);
+          if(!this.hooks.lowQuality())this.hitMarks.paint(MARK.spark,tip.x,tip.y,20+7*alpha,-.5+alpha,alpha);
+        }
         g.lineStyle(1,0xf0cd84,alpha);
         g.lineBetween(tip.x-r*1.6,tip.y,tip.x+r*1.6,tip.y);
         g.lineBetween(tip.x,tip.y-r*1.6,tip.x,tip.y+r*1.6);
@@ -265,11 +296,17 @@ export class ForestScene extends Phaser.Scene {
           const dx=Math.cos(a),dy=Math.sin(a);
           g.lineBetween(e.x+dx*(4+travel),e.y+dy*(4+travel),e.x+dx*(8+travel+alpha*6),e.y+dy*(8+travel+alpha*6));
         }
-      }else if(e.kind==='chain'){if(e.fromWand){const tip=this.rig!.wandTip();e.x=tip.x;e.y=tip.y;}const dx=e.tx!-e.x,dy=e.ty!-e.y,len=Math.hypot(dx,dy)||1;
-        const k=Math.min(11,len*.15)/len,nx=-dy*k,ny=dx*k;
-        const path=()=>{g.beginPath();g.moveTo(e.x,e.y);g.lineTo(e.x+dx*.38+nx,e.y+dy*.38+ny);g.lineTo(e.x+dx*.57-nx,e.y+dy*.57-ny);g.lineTo(e.tx!,e.ty!);g.strokePath();};
-        if(!this.hooks.lowQuality()){g.lineStyle(6,0x77c9ae,alpha*.40);path();}
-        g.lineStyle(1.8,0xe2f3c6,alpha*.95);path();
+      }else if(e.kind==='bloom'){
+        const radius=e.radius??72,t=1-alpha;
+        g.lineStyle(2,0xc5df96,alpha*.74);g.strokeCircle(e.x,e.y,radius*(.30+t*.70));
+        for(let i=0;i<(this.hooks.lowQuality()?4:8);i++){
+          const a=i*Math.PI*(this.hooks.lowQuality()?.50:.25),r=radius*(.20+t*.62);
+          this.hitMarks.paint(MARK.leaf,e.x+Math.cos(a)*r,e.y+Math.sin(a)*r,22+8*alpha,a+.6,alpha);
+        }
+      }else if(e.kind==='chain' && e.arc){
+        const age=e.max-e.life-(e.hop??0)*.018;
+        if(e.fromWand && age<.07){const tip=this.rig!.wandTip();e.x=tip.x;e.y=tip.y;}
+        drawLightning(g,e.arc,e.x,e.y,e.tx!,e.ty!,age,!!e.empowered,this.hooks.lowQuality());
       }else{g.strokeCircle(e.x,e.y,(e.radius??40)*(1-alpha*.65));}}this.hitMarks.end();this.effects=this.effects.filter(e=>e.life>0);}
   private drawStick(){const g=this.stickInk;
     const state=this.stick?[this.stick.x,this.stick.y,this.movement.x,this.movement.y].join(','):'idle';

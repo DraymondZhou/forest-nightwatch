@@ -18,6 +18,17 @@ export const ABILITIES: Ability[] = [
   { id:'fortune',name:'星露',icon:'◇',color:'#dec7ec',kind:'passive',max:4,description:'经验获取 +10%，每级恢复少量生命。',tags:['成长'] }
 ];
 export const WEAPONS = ABILITIES.filter(a=>a.kind==='weapon');
+export const MASTERY_LEVEL=6;
+export const MASTERIES:Record<CharacterId,{name:string;tip:string;details:string}>={
+  hazel:{name:'游雷',tip:'移动蓄电，拉开距离打出重雷。',details:'每移动 30 步，下一发星雷的射程从 24 步提高到 32 步，首击增加 65% 伤害。未找到目标会保留满电。'},
+  fern:{name:'根阵',tip:'绕着孢子场走，把追兵引回阵里。',details:'孢子场落地 1 秒后，踏入或留在场内可令其开花一次。场中敌人受到额外伤害并定身 0.7 秒，首领改为短暂减速。'},
+  ash:{name:'焰枪',tip:'对准敌阵闪避，沿途打穿前排。',details:'发动叶步时，沿闪避方向射出一道焰枪，最多贯穿 3 个目标并点燃。焰枪伤害随余烬等级成长。'}
+};
+export const CLASS_TALENTS:Record<CharacterId,{name:string;description:string}>={
+  hazel:{name:'引雷针',description:'满电的星雷优先锁定射程内的首领或精英，并对它的首击额外提高 25%。'},
+  fern:{name:'返青',description:'一次根阵开花卷入至少两个敌人时，恢复 3 点生命。'},
+  ash:{name:'回火',description:'同一支焰枪穿过第二个敌人时，叶步剩余冷却缩短 1 秒。'}
+};
 export const CHARACTERS: { id:CharacterId; name:string; title:string; weapon:WeaponId; hp:number; speed:number; color:number; description:string; unlock:string }[] = [
   {id:'hazel',name:'榛果',title:'提灯学徒',weapon:'spark',hp:100,speed:185,color:0xd89c60,description:'星雷开局 · 拾取范围 +20%\n带着一盏灯，守住森林的长夜。',unlock:'初始开放'},
   {id:'fern',name:'蕨',title:'月林守望',weapon:'spore',hp:120,speed:175,color:0x92b695,description:'月孢开局 · 区域持续时间 +25%\n让每一寸土地成为你的同伴。',unlock:'任意角色生存至 3 分钟'},
