@@ -177,4 +177,4 @@ const scene=new ForestScene({audio,tick:updateHud,health:updateHealth,showFps:()
 });
 syncAudio();home();
 // Draw on every browser animation frame. Combat uses a separate fixed simulation step.
-new Phaser.Game({type:Phaser.AUTO,parent:'world',width:960,height:540,backgroundColor:'#254539',scene:[scene],audio:{noAudio:true},fps:{limit:0,smoothStep:false},scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},render:{antialias:true,powerPreference:'high-performance'},banner:false});
+new Phaser.Game({type:Phaser.AUTO,parent:'world',width:960,height:540,backgroundColor:'#254539',scene:[scene],audio:{noAudio:true},fps:{limit:0,smoothStep:false},scale:{mode:Phaser.Scale.EXPAND},render:{antialias:true,powerPreference:'high-performance'},banner:false});

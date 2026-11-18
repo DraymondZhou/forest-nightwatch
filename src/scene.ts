@@ -68,6 +68,32 @@ export class ForestScene extends Phaser.Scene {
     const release=(p:Phaser.Input.Pointer)=>{if(p.id===this.stick?.id)reset();};
     this.input.on('pointerup',release);this.input.on('pointerupoutside',release);this.game.canvas.addEventListener('pointercancel',reset);
     this.events.once('shutdown',()=>this.game.canvas.removeEventListener('pointercancel',reset));
+    const resize=(size:Phaser.Structs.Size,_base:Phaser.Structs.Size,_display:Phaser.Structs.Size,previousWidth:number,previousHeight:number)=>{
+      if(size.width===previousWidth && size.height===previousHeight)return;
+      const camera=this.cameras.main;
+      camera.setSize(size.width,size.height);
+      this.woods.resize(size.width,size.height);
+      reset();
+      if(this.sim){
+        const {x,y}=this.sim.player;
+        camera.centerOn(x,y);
+        this.woods.follow(x,y,this.sim.seed);
+        this.drawStick();
+      }
+    };
+    this.scale.on(Phaser.Scale.Events.RESIZE,resize);
+    this.events.once('shutdown',()=>this.scale.off(Phaser.Scale.Events.RESIZE,resize));
+    // Orientation events can arrive before layout settles. Re-read the actual
+    // container even while combat is paused and the game loop is catching up.
+    const viewport=new ResizeObserver(([entry])=>{
+      const {width,height}=entry.contentRect;
+      const display=this.scale.displaySize;
+      if(width<=0 || height<=0 || (width===display.width && height===display.height))return;
+      this.scale.getParentBounds();
+      this.scale.refresh();
+    });
+    viewport.observe(this.game.canvas.parentElement!);
+    this.events.once('shutdown',()=>viewport.disconnect());
     const sampleRender=()=>{
       if(this.running && this.hooks.showFps())this.frameStats.record(performance.now());
     };
