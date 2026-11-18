@@ -1,25 +1,27 @@
 import Phaser from 'phaser';
 import hurtFaces from './hurt-faces.json';
 import {InkMarks,MARK} from './marks';
-import {Combat,RITUAL_TIME,type EnemyKind,type Effect} from './combat';
+import {Combat,RITUAL_TIME,type Effect} from './combat';
 
 import turnAtlas from './traveler-turns.json';
 import travelerAtlas from './traveler-atlas.json';
+import { enemyPoseFrame, enemyRestFrame } from './enemyPose';
+import { EnemyHealth } from './enemyHealth';
 import { PickupSprites } from './pickups';
 import { Woodland } from './terrain';
 import { art } from './art';
 import {WitchRig} from './rig';
 import type {AudioDirector} from './audio';
 
-const FRAME:Record<EnemyKind,number>={slime:0,moth:1,twig:2,spitter:3,beetle:4,brute:5,crystal:6,boss:7};
 const TINT:Record<string,number>={spark:0xa0ecdf,spore:0xc4d599,leaf:0xe2d79b,ember:0xf2b17a,frost:0xb8d9ef,comet:0xd2b0e5,enemy:0xf29483};
 type VisualEffect=Effect&{life:number;max:number;fromWand?:boolean};
-export interface SceneHooks {tick:(sim:Combat,fps:number,slow:number)=>void;upgrade:()=>void;gift:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean}
+export interface SceneHooks {tick:(sim:Combat,fps:number,slow:number)=>void;upgrade:()=>void;gift:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean;showEnemyHealth:()=>boolean;showEnemyHealthNumbers:()=>boolean}
 export class ForestScene extends Phaser.Scene {
   sim?:Combat;running=false;private hooks:SceneHooks;
   private woods!:Woodland;private worldInk!:Phaser.GameObjects.Graphics;private fxInk!:Phaser.GameObjects.Graphics;
   private rig?:WitchRig;private sprites=new Map<number,Phaser.GameObjects.Image>();private spritePool:Phaser.GameObjects.Image[]=[];
   private fieldMarks!:InkMarks;private hitMarks!:InkMarks;private dashQueued=false;
+  private health!:EnemyHealth;
   private pickups!: PickupSprites;
   private readonly visibleEnemies = new Set<number>();
   private readonly remains: {sprite:Phaser.GameObjects.Image; x:number; y:number; dx:number; dy:number; age:number; size:number}[] = [];
@@ -35,19 +37,17 @@ export class ForestScene extends Phaser.Scene {
     this.load.atlas('hurt-faces',art('hurt-faces.png'),hurtFaces);
     this.load.spritesheet('field',art('field-marks.png'),{frameWidth:96,frameHeight:96});
     this.load.spritesheet('pickups',art('pickups.png'),{frameWidth:64,frameHeight:64});
-    this.load.image('ground',art('woodcut-ground.webp'));this.load.image('props',art('woodcut-props.png'));this.load.image('enemies',art('woodcut-enemies.png'));
+    this.load.image('ground',art('woodcut-ground.webp'));this.load.image('props',art('woodcut-props.png'));this.load.spritesheet('enemies',art('enemy-poses.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('grip',art('grip-parts.png'),{frameWidth:128,frameHeight:128});
     this.load.atlas('turns',art('traveler-turns.png'),turnAtlas);
     this.load.atlas('traveler',art('traveler.png'),travelerAtlas);
     this.load.on('loaderror',()=>this.hooks.error('部分美术资源加载失败，请检查网络后重新加载。'));
   }
   create(){
-    const texture=this.textures.get('enemies'),source=texture.getSourceImage();
-    const w=source.width,h=source.height;
-    for(let i=0;i<8;i++){const x=Math.round((i%4)*w/4),y=Math.round(Math.floor(i/4)*h/2);texture.add(i,0,x,y,Math.round((i%4+1)*w/4)-x,Math.round((Math.floor(i/4)+1)*h/2)-y);}
     const props=this.textures.get('props'), sheet=props.getSourceImage();
     for(let i=0;i<4;i++)props.add(i,0,i*sheet.width/4,0,sheet.width/4,sheet.height);
     this.fieldMarks=new InkMarks(this,1,360);this.hitMarks=new InkMarks(this,5001,64);
+    this.health=new EnemyHealth(this);
     this.woods=new Woodland(this);this.pickups=new PickupSprites(this);
     this.worldInk=this.add.graphics().setDepth(-1);this.fxInk=this.add.graphics().setDepth(5000);this.stickInk=this.add.graphics().setScrollFactor(0).setDepth(10000);
     for(let i=0;i<28;i++)this.texts.push(this.add.text(0,0,'',{fontFamily:'Georgia, serif',fontSize:'17px',color:'#f4dfb4',stroke:'#15332d',strokeThickness:3}).setDepth(6000).setVisible(false));
@@ -68,7 +68,7 @@ export class ForestScene extends Phaser.Scene {
   begin(sim:Combat){
     this.dashQueued=false;
     for(const r of this.remains){r.age=1;r.sprite.setVisible(false);}
-    this.fxInk.clear();this.worldInk.clear();
+    this.fxInk.clear();this.worldInk.clear();this.health.begin();this.health.end();
     this.lastGather=-1;this.stickState='';
     this.sim=sim;this.accumulator=0;this.uiClock=0;this.slowFrames=0;this.frames=0;this.frameTime=0;this.lastPaint=0;this.effects=[];
     this.sprites.forEach(s=>{s.setVisible(false);this.spritePool.push(s)});this.sprites.clear();this.texts.forEach(t=>t.setVisible(false));
@@ -141,9 +141,9 @@ export class ForestScene extends Phaser.Scene {
       sprite:this.add.image(0,0,'enemies'),x:0,y:0,dx:0,dy:0,age:0,size:0
     });
     const angle=effect.tx??0;
-    r.x=effect.x;r.y=effect.y-10;r.age=0;r.size=(effect.radius??17)*3.5;
+    r.x=effect.x;r.y=effect.y-10;r.age=0;r.size=(effect.radius??17)*3.5*1.16;
     r.dx=Math.cos(angle)*15;r.dy=Math.sin(angle)*10;
-    r.sprite.setFrame(FRAME[effect.enemyKind]).setFlipX(effect.x>this.sim!.player.x)
+    r.sprite.setFrame(enemyRestFrame(effect.enemyKind)).setFlipX(effect.x>this.sim!.player.x)
       .setDepth(998).setVisible(true);
   }
   private drawRemains(dt:number) {
@@ -158,7 +158,9 @@ export class ForestScene extends Phaser.Scene {
       if(t<.24)r.sprite.setTint(0xffdaa2);else r.sprite.clearTint();
     }
   }
+  refreshEnemyHealth(){if(this.sim&&!this.running)this.drawWorld();}
   private drawWorld(){
+    const showHealth=this.hooks.showEnemyHealth(),showNumbers=showHealth && this.hooks.showEnemyHealthNumbers();this.health.begin();
     const sim=this.sim!,g=this.worldInk;g.clear();this.fieldMarks.begin();
     const view=this.cameras.main.worldView;
     const visible=(x:number,y:number,margin:number)=>x>=view.left-margin && x<=view.right+margin && y>=view.top-margin && y<=view.bottom+margin;
@@ -179,12 +181,21 @@ export class ForestScene extends Phaser.Scene {
     for(const enemy of sim.enemies){
       if(!visible(enemy.x,enemy.y,enemy.radius*2+20))continue;
       living.add(enemy.id);let sprite=this.sprites.get(enemy.id);
-      if(!sprite){sprite=this.spritePool.pop()??this.add.image(0,0,'enemies');sprite.setTexture('enemies',FRAME[enemy.kind]).setVisible(true);this.sprites.set(enemy.id,sprite);}
-      const recoil=enemy.flash/.08;const angle=enemy.hitAngle;const weight=enemy.kind==='boss'?2:7;const size=enemy.radius*3.5;const beat=Math.sin(sim.seconds*(enemy.kind==='moth'?12:7)+enemy.id);
-      const bob=beat*(enemy.kind==='moth'?3.6:enemy.kind==='brute'?.8:1.6);
-      const squash=enemy.kind==='slime'?.054*beat:0;
-      const tilt=enemy.kind==='moth'?.085:enemy.kind==='twig'?.048:.016;
-      sprite.setPosition(enemy.x+Math.cos(angle)*recoil*weight,enemy.y-10+bob+Math.sin(angle)*recoil*weight).setDisplaySize(size*(1+recoil*.09+squash),size*(1-recoil*.08-squash)).setRotation(beat*tilt).setFlipX(enemy.x>sim.player.x);
+      if(!sprite){
+        sprite=this.spritePool.pop()??this.add.image(0,0,'enemies');
+        sprite.setFrame(enemyRestFrame(enemy.kind)).setVisible(true);this.sprites.set(enemy.id,sprite);
+      }
+      if(enemy.frozen<=0 || enemy.flash>0){
+        const distance=Math.hypot(enemy.x-sim.player.x,enemy.y-sim.player.y);
+        const frame=enemyPoseFrame(enemy,distance);
+        if(Number(sprite.frame.name)!==frame)sprite.setFrame(frame);
+      }
+      const recoil=enemy.flash/.08,weight=enemy.kind==='boss'?2:6,size=enemy.radius*3.5;
+      const airborne=enemy.kind==='moth'||enemy.kind==='crystal';
+      const lift=airborne?Math.sin(enemy.gait*9+enemy.id)*2:enemy.kind==='slime'?Math.abs(Math.sin(enemy.gait*4.7+enemy.id))*2:0;
+      sprite.setPosition(enemy.x+Math.cos(enemy.hitAngle)*recoil*weight,enemy.y-10-lift+Math.sin(enemy.hitAngle)*recoil*weight)
+        .setDisplaySize(size*1.16,size*1.16).setFlipX(enemy.x>sim.player.x);
+      if(showHealth)this.health.draw(enemy,sprite.x,sprite.y-size*.46,showNumbers);
       const depth=1000+Math.floor((enemy.y-sim.player.y)/4);if(sprite.depth!==depth)sprite.setDepth(depth);
       if(enemy.flash>.055)sprite.setTint(0xffcf99);else if(enemy.slow>0)sprite.setTint(0xa9d4f0);else sprite.clearTint();
       g.fillStyle(0x102e29,.35);g.fillEllipse(enemy.x,enemy.y+enemy.radius*.6,enemy.radius*1.7,enemy.radius*.65);
@@ -207,7 +218,7 @@ export class ForestScene extends Phaser.Scene {
     }
     const p=sim.player;g.fillStyle(0x0b2926,.5);g.fillEllipse(p.x,p.y+21,35,13);if(sim.dashTime>0){g.lineStyle(1,0xcbe5b2,.55);g.strokeEllipse(p.x,p.y+16,39,12);}
     if(sim.build.leaf){const count=2+sim.build.leaf,r=(80+sim.build.leaf*7)*sim.reach;g.lineStyle(1,0xe4d998,.16);g.strokeCircle(p.x,p.y,r);for(let i=0;i<count;i++){const a=sim.seconds*2.6+i/count*Math.PI*2;const x=p.x+Math.cos(a)*r,y=p.y+Math.sin(a)*r;this.fieldMarks.paint(MARK.leaf,x,y,25,a+1.8);}}
-    this.fieldMarks.end();
+    this.fieldMarks.end();this.health.end();
   }
   private drawEffects(dt:number){const g=this.fxInk;g.clear();this.hitMarks.begin();for(const e of this.effects){e.life-=dt;if(e.life<=0)continue;const alpha=e.life/e.max;g.lineStyle(e.kind==='chain'?3:2,e.color??0xc8dcac,alpha*.8);if(e.kind==='cast'){
         const tip=this.rig!.wandTip(),r=2+alpha*3;

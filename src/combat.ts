@@ -2,8 +2,10 @@ import { CHARACTERS, ABILITIES, type CharacterId, type UpgradeId, type WeaponId 
 import { Random, xpNeeded, activeSynergies, type Build, type RunSummary } from './model';
 
 
+import { ATTACK_POSE_TIME } from './enemyPose';
+
 export type EnemyKind='slime'|'moth'|'twig'|'spitter'|'beetle'|'brute'|'crystal'|'boss';
-export interface Enemy {id:number;kind:EnemyKind;x:number;y:number;hp:number;maxHp:number;radius:number;speed:number;attack:number;phase:number;clock:number;slow:number;frozen:number;burn:number;burnClock:number;spore:number;proc:number;flash:number;hitAngle:number}
+export interface Enemy {id:number;kind:EnemyKind;x:number;y:number;hp:number;maxHp:number;radius:number;speed:number;attack:number;phase:number;clock:number;slow:number;frozen:number;burn:number;burnClock:number;spore:number;proc:number;flash:number;hitAngle:number;gait:number;attackPose:number}
 export interface Shot {id:number;x:number;y:number;vx:number;vy:number;life:number;radius:number;damage:number;weapon:WeaponId|'enemy';pierce:number;hit:Set<number>}
 export interface Zone {id:number;x:number;y:number;radius:number;life:number;tick:number;damage:number;kind:'spore'|'ember'|'warning';timer:number}
 export interface Drop {id:number;x:number;y:number;value:number;born:number;kind:'xp'|'heal'}
@@ -85,7 +87,7 @@ export class Combat {
     if(this.enemies.length>=150&&kind!=='boss')return;
     const angle=this.rng.between(0,Math.PI*2);const radius=this.seconds<15?this.rng.between(120,220):this.rng.between(330,500);
     const [baseHp,speed,size,attack]=ENEMY_STATS[kind];const scale=kind==='boss'?1:1+this.seconds/165;
-    const enemy:Enemy={id:this.nextId(),kind,x:x??this.player.x+Math.cos(angle)*radius,y:y??this.player.y+Math.sin(angle)*radius,hp:baseHp*scale,maxHp:baseHp*scale,radius:size,speed,attack,phase:0,clock:this.rng.between(1,3),slow:0,frozen:0,burn:0,burnClock:0,spore:0,proc:0,flash:0,hitAngle:0};
+    const enemy:Enemy={id:this.nextId(),kind,x:x??this.player.x+Math.cos(angle)*radius,y:y??this.player.y+Math.sin(angle)*radius,hp:baseHp*scale,maxHp:baseHp*scale,radius:size,speed,attack,phase:0,clock:this.rng.between(1,3),slow:0,frozen:0,burn:0,burnClock:0,spore:0,proc:0,flash:0,hitAngle:0,gait:0,attackPose:0};
     this.enemies.push(enemy);return enemy;
   }
   private effect(effect:Effect){if(this.effects.length<100)this.effects.push(effect);}
@@ -235,10 +237,18 @@ export class Combat {
       if(e.kind==='twig'&&e.clock<0.6)speed*=1.8;
       if(e.kind==='spitter'&&dist<280)speed=0;
       if(e.kind==='boss'&&e.hp<e.maxHp*.5){speed*=1.5;e.phase=1;}
+      if(e.frozen<=0){
+        e.attackPose=Math.max(0,e.attackPose-dt);
+        if(e.speed>0)e.gait+=dt*speed/e.speed;
+      }
       e.x+=dx/dist*speed*dt;e.y+=dy/dist*speed*dt;
-      if(dist<e.radius+15)this.hurt(e.attack,e.x,e.y);
+      if(dist<e.radius+15){
+        if(p.invincible<=0 && e.frozen<=0)e.attackPose=ATTACK_POSE_TIME;
+        this.hurt(e.attack,e.x,e.y);
+      }
       if(e.clock<=0){
         e.clock=e.kind==='boss'?(e.phase?2.8:4):e.kind==='twig'?3.5:3;
+        if(e.kind==='spitter'||e.kind==='crystal'||e.kind==='boss')e.attackPose=ATTACK_POSE_TIME;
         if(e.kind==='spitter'||e.kind==='crystal')this.enemyShot(e,Math.atan2(dy,dx));
         if(e.kind==='boss'){
           const count=e.phase?12:8;for(let i=0;i<count;i++)this.enemyShot(e,i/count*Math.PI*2+this.seconds*.16,120);

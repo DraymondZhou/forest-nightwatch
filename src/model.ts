@@ -29,9 +29,9 @@ export const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n
 export interface RunSummary { character:CharacterId; seconds:number; kills:number; won:boolean; level:number; synergy:boolean; seed:number }
 export interface Save {
   version:1; runs:number; kills:number; bestTime:number; wins:CharacterId[]; achievements:string[];
-  settings:{music:number;sound:number;quality:'high'|'low';showFps:boolean};
+  settings:{music:number;sound:number;quality:'high'|'low';showFps:boolean;showEnemyHealth:boolean;showEnemyHealthNumbers:boolean};
 }
-export const newSave=():Save=>({version:1,runs:0,kills:0,bestTime:0,wins:[],achievements:[],settings:{music:0.3,sound:0.5,quality:'high',showFps:false}});
+export const newSave=():Save=>({version:1,runs:0,kills:0,bestTime:0,wins:[],achievements:[],settings:{music:0.3,sound:0.5,quality:'high',showFps:false,showEnemyHealth:true,showEnemyHealthNumbers:false}});
 export function parseSave(value:unknown):Save {
   if(!value||typeof value!=='object') throw new Error('存档格式无效');
   const s=value as Save;
@@ -40,7 +40,7 @@ export function parseSave(value:unknown):Save {
   if(!Array.isArray(s.wins)||!s.wins.every(id=>['hazel','fern','ash'].includes(id))) throw new Error('角色记录无效');
   if(!Array.isArray(s.achievements)||!s.achievements.every(id=>['first','survivor','hunter','synergy','dawn','master'].includes(id))) throw new Error('成就记录无效');
   if(!s.settings||!Number.isFinite(s.settings.music)||!Number.isFinite(s.settings.sound)) throw new Error('设置无效');
-  return {version:1,runs:Math.floor(s.runs),kills:Math.floor(s.kills),bestTime:Math.min(480,s.bestTime),wins:[...new Set(s.wins)],achievements:[...new Set(s.achievements)],settings:{music:clamp(s.settings.music,0,1),sound:clamp(s.settings.sound,0,1),quality:s.settings.quality==='low'?'low':'high',showFps:s.settings.showFps===true}};
+  return {version:1,runs:Math.floor(s.runs),kills:Math.floor(s.kills),bestTime:Math.min(480,s.bestTime),wins:[...new Set(s.wins)],achievements:[...new Set(s.achievements)],settings:{music:clamp(s.settings.music,0,1),sound:clamp(s.settings.sound,0,1),quality:s.settings.quality==='low'?'low':'high',showFps:s.settings.showFps===true,showEnemyHealth:s.settings.showEnemyHealth!==false,showEnemyHealthNumbers:s.settings.showEnemyHealthNumbers===true}};
 }
 export function finishRun(save:Save,run:RunSummary):string[] {
   const before=new Set(save.achievements); save.runs++; save.kills+=run.kills; save.bestTime=Math.max(save.bestTime,run.seconds);

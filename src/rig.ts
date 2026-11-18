@@ -20,6 +20,13 @@ export class WitchRig {
   private readonly wandArm: Bone;
   private readonly wandElbow: Bone;
   private readonly wand: Bone;
+  private readonly upperSleeve: Image;
+  private readonly lowerSleeve: Image;
+  private readonly sideGrip: Image;
+  private readonly shaft: Image;
+  private readonly fingers: Image;
+  private shaftProjection=1;
+  private aimX=0;
   private readonly tip = new Phaser.Math.Vector2();
   private readonly joints = {shoulder:0, elbow:0};
   private phase = 0;
@@ -59,7 +66,8 @@ export class WitchRig {
       return image;
     };
     const gripPart = (bone: Bone, frame: number, originY: number) => {
-      bone.add(scene.add.image(0,0,'grip',frame).setOrigin(.5,originY/32).setScale(.25));
+      const image=scene.add.image(0,0,'grip',frame).setOrigin(.5,originY/32).setScale(.25);
+      bone.add(image);return image;
     };
     this.hips = joint(this.root, 0, 2);
     this.backLeg = joint(this.hips, -5.3, 1);
@@ -75,12 +83,14 @@ export class WitchRig {
     this.cloak = skin(this.chest,'body',32,.5,.09,palette);
 
     this.wandArm = joint(this.chest,-8,6.3);
-    gripPart(this.wandArm,0,8);
+    this.upperSleeve=gripPart(this.wandArm,0,8);
     this.wandElbow = joint(this.wandArm,0,ARM_LENGTH);
-    gripPart(this.wandElbow,1,8);
+    this.lowerSleeve=gripPart(this.wandElbow,1,8);
     this.wand = joint(this.wandElbow,0,ARM_LENGTH);
     // Fingers and shaft share one attachment. Both rotate about the cuff.
-    gripPart(this.wand,2,18);
+    this.sideGrip=gripPart(this.wand,2,18);
+    this.shaft=gripPart(this.wand,5,18);
+    this.fingers=gripPart(this.wand,6,18);
 
     this.head = joint(this.chest,-.5,1.7);
     this.face = skin(this.head,'head',28.5,.5,.90,palette);
@@ -99,8 +109,14 @@ export class WitchRig {
     this.cloak.setOrigin(.5,.09);
     this.chest.scaleX = view === 'left' ? -1 : 1;
     this.head.x = side ? 1.2 : -.5;
-    this.wandArm.x = view === 'right' ? -4.8 : view === 'front' ? -8.3 : 8.6;
-    this.freeArm.x = -this.wandArm.x;
+    this.wandArm.x = view === 'right' ? -4.8 : view === 'front' ? -9.5 : 8.6;
+    this.freeArm.x = side ? -this.wandArm.x : rear ? -10.5 : 10.5;
+    if(rear)this.wandArm.x=10;
+    this.sideGrip.visible=side;
+    this.shaft.visible=this.fingers.visible=!side;
+    this.shaftProjection=1;
+    this.upperSleeve.scaleY=this.lowerSleeve.scaleY=.25;
+    this.wandElbow.y=this.wand.y=ARM_LENGTH;
     // Keep the anatomical right hand. On a left turn and on the back view the
     // right sleeve passes behind the coat. The near sleeve crosses its front.
     this.chest.remove(this.wandArm);
@@ -129,6 +145,7 @@ export class WitchRig {
     this.attackFacing = facingFromVector(dx,dy,this.view);
     if (this.attackFacing !== this.view) this.setView(this.attackFacing);
     this.aim = Math.atan2(dy,Math.abs(dx));
+    this.aimX=dx/(Math.hypot(dx,dy)||1);
     this.castTime = 0;
   }
 
@@ -150,15 +167,23 @@ export class WitchRig {
     const step = Math.sin(this.phase)*this.speed;
     const sideStep = this.walkFacing==='left' ? -1 : 1;
     this.root.alpha = invincible ? .84+.16*Math.abs(Math.sin(seconds*7)) : 1;
-    this.backLeg.rotation = -.06+step*.16*sideStep;
-    this.frontLeg.rotation = .05-step*.16*sideStep;
-    this.backLeg.y = 1-Math.max(0,step)*2.4;
-    this.frontLeg.y = 1.6+Math.min(0,step)*2.4;
-    this.hips.x=this.recoilX*recoil*4;
-    this.hips.y=2-Math.abs(step)*1.35+this.recoilY*recoil*2+lunge*2.4;
-    this.backLeg.rotation+=lunge*.30*sideStep;
-    this.frontLeg.rotation-=lunge*.22*sideStep;
-    this.chest.rotation = step*.035+this.recoilX*recoil*.19+lunge*.15*Math.cos(angle);
+    const axialFeet=this.footView==='front'||this.footView==='back';
+    const depthStep=axialFeet?(this.footView==='front'?step:-step):0;
+    const passing=axialFeet?Math.cos(this.phase)*this.speed:0;
+    this.backLeg.y=1+depthStep*3.1-Math.max(0,passing)*2.6;
+    this.frontLeg.y=1.6-depthStep*3.1-Math.max(0,-passing)*2.6;
+    if(!axialFeet){
+      this.backLeg.y-=Math.max(0,step)*2.4;this.frontLeg.y+=Math.min(0,step)*2.4;
+    }
+    this.backLeg.scaleY=1-.10*Math.max(0,passing);
+    this.frontLeg.scaleY=1-.10*Math.max(0,-passing);
+    const swing=axialFeet?.025:.16;
+    const dashSwing=axialFeet?.04:.28;
+    this.backLeg.rotation=-.035+sideStep*(step*swing+lunge*dashSwing);
+    this.frontLeg.rotation=.035-sideStep*(step*swing+lunge*dashSwing);
+    this.hips.x=this.recoilX*recoil*4+depthStep*.85;
+    this.hips.y=2-Math.abs(step)*(axialFeet?.8:1.35)+this.recoilY*recoil*2+lunge*2.4;
+    this.chest.rotation=step*(axialFeet?.017:.035)+this.recoilX*recoil*.19+lunge*.15*Math.cos(angle);
     this.chest.y = -22+Math.sin(seconds*2.8)*.35;
     this.head.rotation = -this.chest.rotation*.45-this.recoilX*recoil*.11;
     this.head.y=1.7+recoil*2+lunge*.7;
@@ -171,17 +196,53 @@ export class WitchRig {
     // Keep a folded elbow and the grip close to the chest. The wrist leads a
     // short arc; the tip supplies most of the visible travel.
     const front = this.view==='front', rear = this.view==='back', far = this.view==='left';
-    const dx = (front ? 2.5 : rear ? 5.5 : far ? 7.5 : 8.2) + stroke*(front ? 1.5 : 2.8);
-    const dy = (front ? 10 : rear ? 9 : 8.5) - stroke*2.8 + step*.45;
-    bendArm(dx-recoil*2.7,dy-recoil*3-lunge*1.8,rear ? -1 : 1,this.joints);
+    this.freeArm.y=6+((front||rear)?step*1.45:0);
+    if(front||rear){
+      this.verticalCast(front,stroke,step,recoil,lunge);
+      return;
+    }
+    const dx = (far ? 7.5 : 8.2) + stroke*2.8;
+    const dy = 8.5 - stroke*2.8 + step*.45;
+    bendArm(dx-recoil*2.7,dy-recoil*3-lunge*1.8,1,this.joints);
     this.wandArm.rotation = this.joints.shoulder;
     this.wandElbow.rotation = this.joints.elbow;
-    const rest = front ? -.96 : rear ? .93 : .96;
-    const attack = front ? -2.30 : rear ? .28 : Math.PI/2 + Phaser.Math.Clamp(this.aim,-.8,.8);
+    const rest = .96;
+    const attack = Math.PI/2 + Phaser.Math.Clamp(this.aim,-.8,.8);
     this.wand.rotation = rest + (attack-rest)*stroke - this.joints.shoulder-this.joints.elbow;
   }
 
-  wandTip() { return this.wand.getWorldTransformMatrix().transformPoint(.4,-16.75,this.tip); }
+  private verticalCast(front:boolean,stroke:number,step:number,recoil:number,lunge:number){
+    // Place the projected elbow and wrist, then fit just the sleeve art between
+    // them. Scaling the parent bones would also squash the palm and the staff.
+    this.chest.y+=stroke*(front?1.7:-1.4);
+    this.head.y+=stroke*(front?.7:-.3);
+    this.freeArm.rotation+=stroke*(front?.12:-.09);
+    const elbowX=front?-3.0+stroke*.65:3+stroke;
+    const elbowY=7.4-stroke*(front?.7:3.6);
+    const wristX=(front?-2.6:3.6)+this.aimX*stroke*3;
+    const wristY=(front?12:12.4)+stroke*(front?2.4:-12)-recoil*2-lunge+step*.9;
+    const lowerX=wristX-elbowX,lowerY=wristY-elbowY;
+    const upperAngle=Math.atan2(-elbowX,elbowY);
+    const lowerAngle=Math.atan2(-lowerX,lowerY);
+    this.wandArm.rotation=upperAngle;
+    this.wandElbow.rotation=lowerAngle-upperAngle;
+    this.wandElbow.y=Math.hypot(elbowX,elbowY);
+    this.wand.y=Math.hypot(lowerX,lowerY);
+    this.upperSleeve.scaleY=.25*this.wandElbow.y/ARM_LENGTH;
+    this.lowerSleeve.scaleY=.25*this.wand.y/ARM_LENGTH;
+
+    // A staff aimed at the viewer reads shorter. Its projected vector crosses
+    // the horizontal only at the grip; the knuckles stay aligned to the cuff.
+    const restX=front?-6.5:6.7,restY=-12;
+    const tipX=restX+((front?-1.2:1.2)+this.aimX*7-restX)*stroke;
+    const tipY=restY+((front?8:-11)-restY)*stroke;
+    this.shaftProjection=Math.hypot(tipX,tipY)/16.75;
+    this.shaft.scaleY=.25*this.shaftProjection;
+    this.wand.rotation=Math.atan2(tipX,-tipY)-lowerAngle;
+    this.fingers.rotation=-this.wand.rotation;
+  }
+
+  wandTip() { return this.wand.getWorldTransformMatrix().transformPoint(.4,-16.75*this.shaftProjection,this.tip); }
   fall() { this.root.scene.tweens.add({targets:this.root,angle:-70,alpha:.5,duration:350}); }
   destroy() { this.root.destroy(true); }
 }

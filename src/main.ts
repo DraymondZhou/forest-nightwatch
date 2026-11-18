@@ -48,10 +48,10 @@ function journal() {
 }
 function settings() {
   page='settings';const s=store.data.settings;
-  sheet('设置',`<div class="options">${(['music','sound'] as const).map(k=>`<label>${k==='music'?'音乐':'音效'}<input type="range" data-key="${k}" min="0" max="1" step=".05" value="${s[k]}"></label>`).join('')}<label>精简特效<input type="checkbox" data-key="quality" ${s.quality==='low'?'checked':''}></label><label>显示帧率<input type="checkbox" data-key="showFps" ${s.showFps?'checked':''}></label></div><input id="import" type="file" accept="application/json,.json" hidden><p id="notice">${store.warning}</p>`,action('export','导出存档')+action('import','导入存档')+action(run?'pause':'home','返回',true));
+  sheet('设置',`<div class="options">${(['music','sound'] as const).map(k=>`<label>${k==='music'?'音乐':'音效'}<input type="range" data-key="${k}" min="0" max="1" step=".05" value="${s[k]}"></label>`).join('')}<label>精简特效<input type="checkbox" data-key="quality" ${s.quality==='low'?'checked':''}></label><label>怪物血条<input type="checkbox" data-key="showEnemyHealth" ${s.showEnemyHealth?'checked':''}></label><label class="health-numbers">血量数字<input type="checkbox" data-key="showEnemyHealthNumbers" ${s.showEnemyHealth&&s.showEnemyHealthNumbers?'checked':''} ${s.showEnemyHealth?'':'disabled'}></label><label>显示帧率<input type="checkbox" data-key="showFps" ${s.showFps?'checked':''}></label></div><input id="import" type="file" accept="application/json,.json" hidden><p id="notice">${store.warning}</p>`,action('export','导出存档')+action('import','导入存档')+action(run?'pause':'home','返回',true));
   el<HTMLInputElement>('import').onchange=async e=>{
     const f=(e.target as HTMLInputElement).files?.[0];if(!f)return;
-    try{if(f.size>100000)throw Error('存档过大');store.import(await f.text());syncAudio();settings();el('notice').textContent=store.warning||'存档已导入';}
+    try{if(f.size>100000)throw Error('存档过大');store.import(await f.text());syncAudio();scene.refreshEnemyHealth();settings();el('notice').textContent=store.warning||'存档已导入';}
     catch{el('notice').textContent='无法导入，请选择有效的守夜存档。';}
   };
 }
@@ -130,6 +130,15 @@ panel.oninput=e=>{
   const input=e.target as HTMLInputElement;const key=input.dataset.key;
   if(key==='music'||key==='sound')store.data.settings[key]=Number(input.value);
   else if(key==='quality')store.data.settings.quality=input.checked?'low':'high';
+  else if(key==='showEnemyHealth'){
+    store.data.settings.showEnemyHealth=input.checked;
+    const numbers=panel.querySelector<HTMLInputElement>('[data-key="showEnemyHealthNumbers"]')!;
+    numbers.disabled=!input.checked;
+    numbers.checked=input.checked && store.data.settings.showEnemyHealthNumbers;
+    scene.refreshEnemyHealth();
+  }else if(key==='showEnemyHealthNumbers' && store.data.settings.showEnemyHealth){
+    store.data.settings.showEnemyHealthNumbers=input.checked;scene.refreshEnemyHealth();
+  }
   else if(key==='showFps')store.data.settings.showFps=input.checked;
   else return;syncAudio();store.write();
 };
@@ -139,7 +148,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden){audio.paus
 el('pause').onclick=pause;
 el('dash').onpointerdown=e=>{if(page==='battle'){e.preventDefault();scene.requestDash();}};
 el('dash').onclick=e=>{if(e.detail===0 && page==='battle')scene.requestDash();};
-const scene=new ForestScene({audio,tick:updateHud,upgrade,end,pause,gift:chooseGift,wound:(x,y,low)=>battleHud.wound(x,y,low), lowQuality:()=>store.data.settings.quality==='low',
+const scene=new ForestScene({audio,tick:updateHud,upgrade,end,pause,gift:chooseGift,wound:(x,y,low)=>battleHud.wound(x,y,low), lowQuality:()=>store.data.settings.quality==='low',showEnemyHealth:()=>store.data.settings.showEnemyHealth,showEnemyHealthNumbers:()=>store.data.settings.showEnemyHealthNumbers,
   ready:()=>{if(!assetError){ready=true;home();}},
   error:message=>{assetError=true;sheet('森林载入失败',`<p>${message}</p>`,'<button id="reload">重新加载</button>');el('reload').onclick=()=>location.reload();}
 });
