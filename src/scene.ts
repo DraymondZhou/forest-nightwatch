@@ -16,7 +16,7 @@ import type {AudioDirector} from './audio';
 
 const TINT:Record<string,number>={spark:0xa0ecdf,spore:0xc4d599,leaf:0xe2d79b,ember:0xf2b17a,frost:0xb8d9ef,comet:0xd2b0e5,enemy:0xf29483};
 type VisualEffect=Effect&{life:number;max:number;fromWand?:boolean};
-export interface SceneHooks {tick:(sim:Combat,fps:number,low:number)=>void;health:(sim:Combat)=>void;showFps:()=>boolean;upgrade:()=>void;gift:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean;showEnemyHealth:()=>boolean;showEnemyHealthNumbers:()=>boolean}
+export interface SceneHooks {tick:(sim:Combat,stats:FrameStats)=>void;health:(sim:Combat)=>void;showFps:()=>boolean;upgrade:()=>void;gift:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean;showEnemyHealth:()=>boolean;showEnemyHealthNumbers:()=>boolean}
 export class ForestScene extends Phaser.Scene {
   sim?:Combat;running=false;private hooks:SceneHooks;
   private woods!:Woodland;private worldInk!:Phaser.GameObjects.Graphics;private fxInk!:Phaser.GameObjects.Graphics;
@@ -65,6 +65,11 @@ export class ForestScene extends Phaser.Scene {
     const release=(p:Phaser.Input.Pointer)=>{if(p.id===this.stick?.id)reset();};
     this.input.on('pointerup',release);this.input.on('pointerupoutside',release);this.game.canvas.addEventListener('pointercancel',reset);
     this.events.once('shutdown',()=>this.game.canvas.removeEventListener('pointercancel',reset));
+    const sampleRender=()=>{
+      if(this.running && this.hooks.showFps())this.frameStats.record(performance.now());
+    };
+    this.game.events.on(Phaser.Core.Events.POST_RENDER,sampleRender);
+    this.events.once('shutdown',()=>this.game.events.off(Phaser.Core.Events.POST_RENDER,sampleRender));
     this.hooks.ready();
   }
   requestDash(){if(this.running && this.sim && this.sim.dashCooldown<=0)this.dashQueued=true;}
@@ -80,20 +85,19 @@ export class ForestScene extends Phaser.Scene {
     this.rig.update(0,false,0,false,0);
     this.rig.root.setPosition(sim.player.x,sim.player.y).setDepth(1000);this.cameras.main.centerOn(sim.player.x,sim.player.y);
     this.cameras.main.startFollow(this.rig.root,true,.12,.12);this.cameras.main.setZoom(1);
-    this.hooks.tick(sim,0,0);
+    this.hooks.tick(sim,this.frameStats);
   }
   setPaused(paused:boolean){this.running=!paused;this.dashQueued=false;this.frameStats.reset();this.movement={x:0,y:0};this.stick=undefined;this.stickInk?.clear();this.stickState='';this.accumulator=0;this.input?.keyboard?.resetKeys();}
   update(_time:number,delta:number){
     if(!this.sim||!this.rig||!this.running)return;
     const dt=Math.min(delta/1000,.1);
-    if(this.hooks.showFps())this.frameStats.record(performance.now());
     const k=this.keys;const input={x:this.movement.x+(k?.D.isDown||k?.RIGHT.isDown?1:0)-(k?.A.isDown||k?.LEFT.isDown?1:0),y:this.movement.y+(k?.S.isDown||k?.DOWN.isDown?1:0)-(k?.W.isDown||k?.UP.isDown?1:0)};
     this.accumulator=Math.min(this.accumulator+dt,.1);
     while(this.accumulator>=1/60&&this.running){
       this.sim.step(1/60,{...input,dash:this.dashQueued});this.dashQueued=false;this.accumulator-=1/60;this.captureEffects();
       if(this.sim.ended){
         this.running=false;
-        this.hooks.tick(this.sim,this.frameStats.average,this.frameStats.low);
+        this.hooks.tick(this.sim,this.frameStats);
         if(this.sim.player.hp<=0){
           this.rig.fall();const finished=this.sim;
           this.time.delayedCall(380,()=>{if(this.sim===finished)this.hooks.end();});
@@ -106,7 +110,7 @@ export class ForestScene extends Phaser.Scene {
     this.rig.update(dt,this.sim.player.moving,this.sim.player.angle,this.sim.player.invincible>0,this.sim.seconds,this.sim.dashTime);
     this.rig.root.setPosition(this.sim.player.x,this.sim.player.y);
     this.woods.follow(this.sim.player.x,this.sim.player.y,this.sim.seed);this.drawWorld();this.drawRemains(dt);this.drawEffects(this.running?dt:0);this.drawStick();
-    this.uiClock+=dt;if(this.uiClock>.12){this.uiClock=0;this.hooks.tick(this.sim,this.frameStats.average,this.frameStats.low);}
+    this.uiClock+=dt;if(this.uiClock>.12){this.uiClock=0;this.hooks.tick(this.sim,this.frameStats);}
   }
   private captureEffects(){
     for(const effect of this.sim!.effects){

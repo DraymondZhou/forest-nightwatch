@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import './style.css';
 import { AudioDirector } from './audio';
 import { buildPanel } from './buildPanel';
+import type { FrameStats } from './frameStats';
 import { BattleHud } from './battleHud';
 import { Combat } from './combat';
 import { ForestScene } from './scene';
@@ -110,10 +111,10 @@ function updateHealth(s:Combat){
   el('health').textContent=`${s.character.name}　${Math.ceil(s.player.hp)} / ${s.player.maxHp}　 Lv.${s.level}`;
   el<HTMLMeterElement>('hp').value=s.player.hp/s.player.maxHp;
 }
-function updateHud(s:Combat,fps:number,low:number) {
+function updateHud(s:Combat,stats:FrameStats) {
   battleHud.update(s);updateHealth(s);
   el<HTMLMeterElement>('xp').value=s.xp/xpNeeded(s.level);
-  el('clock').textContent=clock(s.seconds);el('perf').textContent=store.data.settings.showFps?`平均 ${fps?Math.round(fps):"—"} FPS · 1% Low ${low?Math.round(low):"—"} FPS`:'';
+  el('clock').textContent=clock(s.seconds);el('perf').textContent=store.data.settings.showFps?`实际 ${Math.round(stats.current)||"—"} · 平均 ${Math.round(stats.average)||"—"} · 1% Low ${Math.round(stats.low)||"—"} FPS`:'';
   const skills=ABILITIES.filter(a=>s.build[a.id]).map(a=>`<i style="color:${a.color}" title="${a.name}">${a.icon} <small>${s.build[a.id]}</small></i>`).join('');
   if(skills!==shownSkills){el('skills').innerHTML=skills;shownSkills=skills;}
   const boss=s.boss;el('boss').textContent=boss?`古树守卫${boss.phase?' · 狂怒':''}　${Math.ceil(100*boss.hp/boss.maxHp)}%`:'';
@@ -156,5 +157,5 @@ const scene=new ForestScene({audio,tick:updateHud,health:updateHealth,showFps:()
   error:message=>{assetError=true;sheet('森林载入失败',`<p>${message}</p>`,'<button id="reload">重新加载</button>');el('reload').onclick=()=>location.reload();}
 });
 syncAudio();home();
-// Allow ordinary 60 Hz rAF jitter without dropping an entire refresh at the 16.67 ms boundary.
-new Phaser.Game({type:Phaser.AUTO,parent:'world',width:960,height:540,backgroundColor:'#254539',scene:[scene],audio:{noAudio:true},fps:{target:60,limit:64},scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},render:{antialias:true,powerPreference:'high-performance'},banner:false});
+// Draw on every browser animation frame. Combat uses a separate fixed simulation step.
+new Phaser.Game({type:Phaser.AUTO,parent:'world',width:960,height:540,backgroundColor:'#254539',scene:[scene],audio:{noAudio:true},fps:{limit:0,smoothStep:false},scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},render:{antialias:true,powerPreference:'high-performance'},banner:false});
