@@ -30,6 +30,8 @@ npm run build
 
 ## 资源与许可
 
+星雷命中图集 `public/art/storm-impact.png` 改编自 13rice 的 *Radial lightning effect*。本作裁取六帧，并为普通和满电攻击分别着色。原素材采用 CC0。[作者及原图](https://opengameart.org/content/radial-lightning-effect) · [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
+
 自制代码与游戏资源目前未授予开源使用许可。公开仓库用于交付与审阅，并不自动授权复制发行。第三方依赖沿用其各自许可；AI 辅助资源会记录生成方式与提示词。
 
 ## 离线与手机试玩

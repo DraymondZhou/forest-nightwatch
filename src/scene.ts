@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import {drawLightning,shapeLightning} from './lightning';
+import {drawLightning,shapeLightning,stormImpactFrame} from './lightning';
 import {FrameStats} from './frameStats';
 import hurtFaces from './hurt-faces.json';
 import {InkMarks,MARK} from './marks';
@@ -22,7 +22,7 @@ export class ForestScene extends Phaser.Scene {
   sim?:Combat;running=false;private hooks:SceneHooks;
   private woods!:Woodland;private worldInk!:Phaser.GameObjects.Graphics;private fxInk!:Phaser.GameObjects.Graphics;
   private rig?:WitchRig;private sprites=new Map<number,Phaser.GameObjects.Image>();private spritePool:Phaser.GameObjects.Image[]=[];
-  private fieldMarks!:InkMarks;private hitMarks!:InkMarks;private dashQueued=false;
+  private fieldMarks!:InkMarks;private hitMarks!:InkMarks;private stormMarks!:InkMarks;private dashQueued=false;
   private health!:EnemyHealth;
   private pickups!: PickupSprites;
   private readonly visibleEnemies = new Set<number>();
@@ -39,6 +39,7 @@ export class ForestScene extends Phaser.Scene {
   preload(){
     this.load.atlas('hurt-faces',art('hurt-faces.png'),hurtFaces);
     this.load.spritesheet('field',art('field-marks.png'),{frameWidth:96,frameHeight:96});
+    this.load.spritesheet('storm-impact',art('storm-impact.png'),{frameWidth:64,frameHeight:64});
     this.load.spritesheet('pickups',art('pickups.png'),{frameWidth:64,frameHeight:64});
     this.load.image('ground',art('woodcut-ground.webp'));this.load.image('props',art('woodcut-props.png'));this.load.spritesheet('enemies',art('enemy-poses.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('grip',art('grip-parts.png'),{frameWidth:128,frameHeight:128});
@@ -50,6 +51,7 @@ export class ForestScene extends Phaser.Scene {
     const props=this.textures.get('props'), sheet=props.getSourceImage();
     for(let i=0;i<4;i++)props.add(i,0,i*sheet.width/4,0,sheet.width/4,sheet.height);
     this.fieldMarks=new InkMarks(this,1,360);this.hitMarks=new InkMarks(this,5001,64);
+    this.stormMarks=new InkMarks(this,5001,32,'storm-impact');
     this.health=new EnemyHealth(this);
     this.woundText=this.add.bitmapText(0,0,HEALTH_FONT,'',14).setTint(0xffa59c).setDepth(6000).setVisible(false);
     this.woods=new Woodland(this);this.pickups=new PickupSprites(this);
@@ -140,7 +142,10 @@ export class ForestScene extends Phaser.Scene {
         if(this.sim!.seconds-this.lastGather<.12)continue;
         this.lastGather=this.sim!.seconds;this.hooks.audio.gather();
       }
-      if(effect.kind==='strike')this.hooks.audio.impact((effect.radius??0)>18,effect.weapon);
+      if(effect.kind==='strike'){
+        this.hooks.audio.impact((effect.radius??0)>18,effect.weapon);
+        if(effect.weapon==='spark')continue; // Each chain hop paints its own timed impact.
+      }
       if(effect.kind==='wound'){
         if(!this.hooks.lowQuality()){
           const t=this.woundText;this.tweens.killTweensOf(t);
@@ -258,12 +263,11 @@ export class ForestScene extends Phaser.Scene {
     if(sim.build.leaf){const count=2+sim.build.leaf,r=(80+sim.build.leaf*7)*sim.reach;g.lineStyle(1,0xe4d998,.16);g.strokeCircle(p.x,p.y,r);for(let i=0;i<count;i++){const a=sim.seconds*2.6+i/count*Math.PI*2;const x=p.x+Math.cos(a)*r,y=p.y+Math.sin(a)*r;this.fieldMarks.paint(MARK.leaf,x,y,25,a+1.8);}}
     this.fieldMarks.end();this.health.end();
   }
-  private drawEffects(dt:number){const g=this.fxInk;g.clear();this.hitMarks.begin();for(const e of this.effects){e.life-=dt;if(e.life<=0)continue;const alpha=e.life/e.max;g.lineStyle(e.kind==='chain'?3:2,e.color??0xc8dcac,alpha*.8);if(e.kind==='cast'){
+  private drawEffects(dt:number){const g=this.fxInk;g.clear();this.hitMarks.begin();this.stormMarks.begin();for(const e of this.effects){e.life-=dt;if(e.life<=0)continue;const alpha=e.life/e.max;g.lineStyle(e.kind==='chain'?3:2,e.color??0xc8dcac,alpha*.8);if(e.kind==='cast'){
         const tip=this.rig!.wandTip(),r=2+alpha*3;
         if(e.weapon==='spark'){
-          const radius=4+7*(1-alpha);
-          g.lineStyle(1.5,0xb8fbe5,alpha);g.strokeCircle(tip.x,tip.y,radius);
-          if(!this.hooks.lowQuality())this.hitMarks.paint(MARK.spark,tip.x,tip.y,20+7*alpha,-.5+alpha,alpha);
+          this.stormMarks.paint(Math.min(5,Math.floor((1-alpha)*6)),tip.x,tip.y,18,-.7,alpha);
+          continue;
         }
         g.lineStyle(1,0xf0cd84,alpha);
         g.lineBetween(tip.x-r*1.6,tip.y,tip.x+r*1.6,tip.y);
@@ -306,8 +310,11 @@ export class ForestScene extends Phaser.Scene {
       }else if(e.kind==='chain' && e.arc){
         const age=e.max-e.life-(e.hop??0)*.018;
         if(e.fromWand && age<.07){const tip=this.rig!.wandTip();e.x=tip.x;e.y=tip.y;}
-        drawLightning(g,e.arc,e.x,e.y,e.tx!,e.ty!,age,!!e.empowered,this.hooks.lowQuality());
-      }else{g.strokeCircle(e.x,e.y,(e.radius??40)*(1-alpha*.65));}}this.hitMarks.end();this.effects=this.effects.filter(e=>e.life>0);}
+        const charged=!!e.empowered;
+        drawLightning(g,e.arc,e.x,e.y,e.tx!,e.ty!,age,charged,this.hooks.lowQuality());
+        const frame=stormImpactFrame(age,charged);
+        if(frame>=0)this.stormMarks.paint(frame,e.tx!,e.ty!,charged?53:33,e.arc.angle);
+      }else{g.strokeCircle(e.x,e.y,(e.radius??40)*(1-alpha*.65));}}this.hitMarks.end();this.stormMarks.end();this.effects=this.effects.filter(e=>e.life>0);}
   private drawStick(){const g=this.stickInk;
     const state=this.stick?[this.stick.x,this.stick.y,this.movement.x,this.movement.y].join(','):'idle';
     if(state===this.stickState)return;this.stickState=state;g.clear();if(!this.running||(!this.stick&&!this.touchControl.matches))return;const x=this.stick?.x??110,y=this.stick?.y??this.scale.height-115;g.lineStyle(2,0xd9e6d1,.2);g.strokeCircle(x,y,58);g.fillStyle(0xd9e6d1,this.stick?.12:.035);g.fillCircle(x,y,56);g.fillStyle(0xe3eadb,this.stick?.3:.09);g.fillCircle(x+this.movement.x*42,y+this.movement.y*42,23);}

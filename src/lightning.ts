@@ -1,85 +1,70 @@
 import type Phaser from 'phaser';
 
-type Ink=Phaser.GameObjects.Graphics;
-interface Bend { u:number; offset:number }
+type Ink = Phaser.GameObjects.Graphics;
+interface Bend { u:number; offset:number; width:number }
 
-// Normalized along the bolt so the first few frames can follow the casting hand.
 export function shapeLightning(seed:number,distance:number){
   let state=seed|0;
   const noise=()=>{state=(Math.imul(state,1664525)+1013904223)|0;return (state>>>0)/4294967296;};
-  const count=Math.max(4,Math.min(12,Math.round(distance/18)));
-  const bends:Bend[]=[{u:0,offset:0}];
+  const count=Math.max(3,Math.min(9,Math.round(distance/24)));
+  const bends:Bend[]=[{u:0,offset:0,width:0}];
+  const spread=Math.min(22,distance*.14);
+  let hand=noise()<.5?-1:1;
   for(let i=1;i<count;i++){
-    const u=(i+(noise()-.5)*.62)/count;
-    const taper=Math.sin(Math.PI*u);
-    bends.push({u,offset:(noise()-.5)*Math.min(distance*.27,38)*taper});
+    const u=(i+(noise()-.5)*.65)/count;
+    const offset=hand*(.25+.75*noise())*spread*Math.sin(Math.PI*u);
+    bends.push({u,offset,width:.6+noise()*.95});
+    if(noise()<.82)hand=-hand;
   }
-  bends.push({u:1,offset:0});
-  return {bends,hand:noise()<.5?-1:1,angle:noise()*Math.PI};
+  bends.push({u:1,offset:0,width:0});
+  return {bends,hand,angle:noise()*Math.PI*2};
 }
 type Arc=ReturnType<typeof shapeLightning>;
 
-function stroke(g:Ink,bends:Bend[],length:number,progress:number){
-  g.beginPath();g.moveTo(0,0);
-  for(let i=1;i<bends.length;i++){
-    const b=bends[i];
-    if(b.u>progress){
-      const a=bends[i-1],t=(progress-a.u)/(b.u-a.u);
-      g.lineTo(progress*length,a.offset+(b.offset-a.offset)*t);break;
-    }
-    g.lineTo(b.u*length,b.offset);
-  }
-  g.strokePath();
-}
-
+// Each facet shares an edge with its neighbour. The lopsided silhouette leaves
+// points of varying thickness when the white flash has already disappeared.
 export function drawLightning(g:Ink,arc:Arc,x:number,y:number,tx:number,ty:number,age:number,charged:boolean,low:boolean){
-  if(age<=0)return;
+  const end=charged?.155:.125;
+  if(age<=0 || age>=end)return;
   const dx=tx-x,dy=ty-y,length=Math.hypot(dx,dy);
   if(length<1)return;
-  const travel=Math.min(1,age/.045),fade=Math.min(1,Math.max(0,(.26-age)/.18));
-  const color=charged?0xffc774:0x82ded8,light=charged?0xffedac:0xd7fff0;
+  const travel=Math.min(1,age/.036);
+  const tail=Math.max(0,(age-.066)/(end-.066));
+  const width=(charged?3.65:2.2)*(1-tail*.54);
+  const color=charged?0xe8a35b:0x98c8a8,light=charged?0xffedb9:0xe8eed1;
   g.save();g.translateCanvas(x,y);g.rotateCanvas(Math.atan2(dy,dx));
-  if(!low){
-    g.lineStyle(charged?13:9,color,.15*fade);stroke(g,arc.bends,length,travel);
-    g.lineStyle(charged?6:4,color,.80*fade);stroke(g,arc.bends,length,travel);
-    // Fine filaments and ink flecks break up the silhouette as the channel discharges.
-    const tail=Math.min(1,age/.14);
-    if(charged && travel>.55){
-      const mid=arc.bends[Math.floor(arc.bends.length/2)];
-      const spread=Math.min(15,length*.09)*arc.hand;
-      g.lineStyle(1,0xffdfa0,.66*fade);g.beginPath();g.moveTo(length*.12,0);
-      g.lineTo(length*.30,spread);g.lineTo(length*.35,spread*.58);
-      g.lineTo(mid.u*length,mid.offset);g.strokePath();
+  for(let i=1;i<arc.bends.length;i++){
+    const a=arc.bends[i-1],b=arc.bends[i];
+    if(a.u>=travel)break;
+    const shown=Math.min(1,(travel-a.u)/(b.u-a.u));
+    const cut=tail*(i%2?.70:.32);
+    if(shown<=cut)continue;
+    const spanX=(b.u-a.u)*length,spanY=b.offset-a.offset;
+    const ax=a.u*length+spanX*cut,ay=a.offset+spanY*cut;
+    const bx=a.u*length+spanX*shown,by=a.offset+spanY*shown;
+    const wa=a.width*width*(1-cut),wb=b.width*width*shown;
+    g.fillStyle(color,1-tail*.76);
+    g.fillTriangle(ax,ay-wa*.3,ax,ay+wa,bx,by-wb*.3);
+    g.fillTriangle(ax,ay+wa,bx,by+wb,bx,by-wb*.3);
+    if(age<.064 && (i%2===1 || charged)){
+      g.fillStyle(light,.94);
+      g.fillTriangle(ax,ay+wa*.52,bx,by-wb*.24,bx,by+wb*.55);
     }
-    for(let i=1;i<arc.bends.length-1;i+=2){
-      const b=arc.bends[i];if(b.u>travel)break;
-      const side=i%4===1?1:-1,fx=b.u*length+tail*4,fy=b.offset+side*(3+tail*9);
-      g.fillStyle(light,fade*.83);g.fillTriangle(fx-1.5,fy+1,fx+2.3,fy-2,fx+.7,fy+1.4);
-    }
-    for(let i=2;i<arc.bends.length-1;i+=3){
-      const bend=arc.bends[i];
-      if(travel<bend.u)break;
-      const side=arc.hand*((i%2)?1:-1),bx=bend.u*length,by=bend.offset;
-      const span=Math.min(30,length*.19)*(charged?1.15:1);
-      g.lineStyle(1.35,color,.86*fade);
-      g.beginPath();g.moveTo(bx,by);g.lineTo(bx+span*.39,by+span*.43*side);
-      g.lineTo(bx+span*.34,by+span*.64*side);g.lineTo(bx+span,by+span*.93*side);g.strokePath();
-    }
-  }
-  g.lineStyle(charged?2.8:1.9,light,fade);stroke(g,arc.bends,length,travel);
-  if(travel===1){
-    const impact=Math.min(1,(age-.045)/.18),r=(charged?20:13)*(1+impact*.5);
-    if(!low){
-      g.lineStyle(1.4,color,.72*fade);
-      g.beginPath();g.arc(length,0,r*(.38+impact*.60),arc.angle+.4,arc.angle+4.1);g.strokePath();
-    }
-    g.fillStyle(light,fade);g.fillCircle(length,0,Math.max(1,4*(1-impact)));
-    for(let i=0;i<(low?3:6);i++){
-      const angle=arc.angle+i*2.40,ux=Math.cos(angle),uy=Math.sin(angle);
-      const start=r*(.16+.50*impact),end=r*(i%2?.72:1);
-      const bx=length+ux*start,by=uy*start,w=1.8*(1-impact)+.5;
-      g.fillTriangle(bx-uy*w,by+ux*w,length+ux*end,uy*end,bx+uy*w,by-ux*w);
+    if(!low && i%3===2 && shown===1 && tail<.65){
+      const fork=Math.min(20,length*.14)*(charged?1.24:.86),side=i%2?arc.hand:-arc.hand;
+      const mx=bx+fork*.42,my=by+fork*.42*side;
+      g.fillStyle(color,.85*(1-tail));
+      g.fillTriangle(bx,by,mx-2,my,mx+1.4,my);
+      g.fillTriangle(mx-2,my,mx+1.4,my,bx+fork*.24,by+fork*side);
     }
   }
   g.restore();
+}
+
+// The atlas starts with a flash and ends on separated flecks. Use elapsed time
+// so that frame selection also holds at 30 Hz and on high-refresh displays.
+export function stormImpactFrame(age:number,charged:boolean){
+  const elapsed=age-.036;
+  const frame=Math.floor(elapsed/(charged?.034:.026));
+  return frame>=0 && frame<6?frame+(charged?6:0):-1;
 }
