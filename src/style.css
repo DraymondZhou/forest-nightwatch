@@ -2,9 +2,8 @@
 
 #wound {
   position:absolute;inset:0;opacity:0;pointer-events:none;
-  background:
-    radial-gradient(ellipse 31% 27% at var(--hit-x,50%) var(--hit-y,85%), #933b3cba, transparent 90%),
-    radial-gradient(ellipse 76% 82% at 50% 49%, transparent 53%, #692c3699 88%, #853b43dc);
+  will-change:opacity;overflow:hidden;
+  background:radial-gradient(ellipse 76% 82% at 50% 49%, transparent 53%, #692c3699 88%, #853b43dc);
 }
 #dash {
   position:absolute;right:max(5%,env(safe-area-inset-right));bottom:max(12%,env(safe-area-inset-bottom));
@@ -20,7 +19,7 @@
   color:#f7df9e;background:#162e27e8;font-size:12px;white-space:nowrap}
 #objective:empty {display:none}
 #boss:not(:empty)~#objective {top:22%}
-#wound svg {position:absolute;width:clamp(90px,23vw,245px);left:var(--hit-x);top:var(--hit-y);transform:translate(-84%,-50%) rotate(var(--ink-angle));transform-origin:84% 50%;opacity:.80} #wound.quiet svg {display:none}
+#wound svg {position:absolute;width:clamp(90px,23vw,245px);left:50%;top:85%;transform:translate(-84%,-50%);will-change:transform;transform-origin:84% 50%;opacity:.80} #wound.quiet svg {display:none}
 
 .sheet.build-sheet {
   width:min(730px,100%);max-height:min(88dvh,680px);padding:20px 26px 16px;

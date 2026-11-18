@@ -2,10 +2,15 @@ import type {WeaponId} from './content';
 
 export class AudioDirector {
   private ctx?:AudioContext; private master?:GainNode;private timer?:ReturnType<typeof setInterval>;private step=0;private lastHit=0;
+  private hurtSample?:AudioBuffer;
+  private hurtVolume?:GainNode;
   music=.3;sound=.5;paused=true;combat=false;
   async start(){
     this.ctx??=new AudioContext();await this.ctx.resume();
-    if(!this.master){this.master=this.ctx.createGain();this.master.gain.value=.5;this.master.connect(this.ctx.destination);}
+    if(!this.master){this.master=this.ctx.createGain();this.master.gain.value=.5;this.master.connect(this.ctx.destination);
+      this.hurtVolume=this.ctx.createGain();this.hurtVolume.connect(this.master);
+      void this.prepareHurt(this.ctx.sampleRate).catch(()=>{ /* Live synthesis is available until a sample is ready. */ });
+    }
     this.paused=false;
     if(!this.timer)this.timer=setInterval(()=>this.tick(),360);
   }
@@ -30,22 +35,37 @@ export class AudioDirector {
     else if(weapon==='ember')this.tone(104,.13,this.sound*.15,'triangle',46);
     else if(heavy)this.tone(800,.032,this.sound*.045,'square',240);
   }
-  hurt(){
-    const ctx=this.ctx;
-    if(!ctx||!this.master||ctx.state!=='running'||this.paused||this.sound<=0)return;
-    // A breathy voiced onset through two vocal resonances, layered over the impact.
-    const now=ctx.currentTime, voice=ctx.createOscillator(), envelope=ctx.createGain();
+  private scheduleHurt(ctx:BaseAudioContext,output:AudioNode){
+    const now=ctx.currentTime;
+    const voice=ctx.createOscillator(),envelope=ctx.createGain();
     voice.type='sawtooth';voice.frequency.setValueAtTime(265,now);
     voice.frequency.exponentialRampToValueAtTime(153,now+.14);
-    envelope.gain.setValueAtTime(.0001,now);envelope.gain.exponentialRampToValueAtTime(this.sound*.115,now+.016);
+    envelope.gain.setValueAtTime(.0001,now);envelope.gain.exponentialRampToValueAtTime(.115,now+.016);
     envelope.gain.exponentialRampToValueAtTime(.0001,now+.16);
     const filters=[720,1540].map(freq=>{
-      const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=freq;f.Q.value=2.5;
-      voice.connect(f);f.connect(envelope);return f;
+      const filter=ctx.createBiquadFilter();filter.type='bandpass';filter.frequency.value=freq;filter.Q.value=2.5;
+      voice.connect(filter);filter.connect(envelope);return filter;
     });
-    envelope.connect(this.master);voice.start(now);voice.stop(now+.17);
+    envelope.connect(output);voice.start(now);voice.stop(now+.17);
     voice.onended=()=>{voice.disconnect();envelope.disconnect();filters.forEach(f=>f.disconnect());};
-    this.tone(116,.12,this.sound*.22,'triangle',48);
+    const thud=ctx.createOscillator(),gain=ctx.createGain();
+    thud.type='triangle';thud.frequency.setValueAtTime(116,now);thud.frequency.exponentialRampToValueAtTime(48,now+.12);
+    gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.22,now+.012);gain.gain.exponentialRampToValueAtTime(.0001,now+.12);
+    thud.connect(gain);gain.connect(output);thud.start(now);thud.stop(now+.14);
+    thud.onended=()=>{thud.disconnect();gain.disconnect();};
+  }
+  private async prepareHurt(rate:number){
+    const offline=new OfflineAudioContext(1,Math.ceil(rate*.18),rate);
+    this.scheduleHurt(offline,offline.destination);
+    this.hurtSample=await offline.startRendering();
+  }
+  hurt(){
+    const ctx=this.ctx,volume=this.hurtVolume;
+    if(!ctx||!volume||ctx.state!=='running'||this.paused||this.sound<=0)return;
+    volume.gain.value=this.sound;
+    if(!this.hurtSample){this.scheduleHurt(ctx,volume);return;}
+    const source=ctx.createBufferSource();source.buffer=this.hurtSample;
+    source.connect(volume);source.onended=()=>source.disconnect();source.start();
   }
   play(kind:'hit'|'level'|'click'|'win'|'lose'|'heal'|'dash'|'evade'){
     if(kind==='hit'){if(performance.now()-this.lastHit<110)return;this.lastHit=performance.now();this.tone(340,.075,this.sound*.06,'triangle',140);}

@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import type { Enemy } from './combat';
 
-const FONT='enemy-hp-digits';
-const DIGITS='0123456789/';
+export const HEALTH_FONT='enemy-hp-digits';
+const DIGITS='0123456789/−';
 const ADVANCE=7;
 const LABEL_HEIGHT=13;
 
@@ -23,10 +23,10 @@ export class EnemyHealth {
 
   constructor(private readonly scene:Phaser.Scene){
     this.bars=scene.add.graphics().setDepth(5100);
-    if(scene.cache.bitmapFont.has(FONT))return;
-    // All enemies share eleven glyphs, including when damage changes every tick.
+    if(scene.cache.bitmapFont.has(HEALTH_FONT))return;
+    // Health labels and incoming damage share one atlas so hits do not upload new textures.
     const cell=14,height=24;
-    const atlas=scene.textures.createCanvas(FONT,cell*DIGITS.length,height)!;
+    const atlas=scene.textures.createCanvas(HEALTH_FONT,cell*DIGITS.length,height)!;
     const ctx=atlas.context;
     ctx.font='bold 18px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.strokeStyle='#192e2b';ctx.lineWidth=3;ctx.lineJoin='round';ctx.fillStyle='#fff1d2';
@@ -35,8 +35,8 @@ export class EnemyHealth {
       ctx.strokeText(DIGITS[i],x,height/2);ctx.fillText(DIGITS[i],x,height/2);
     }
     atlas.refresh();
-    const data=Phaser.GameObjects.RetroFont.Parse(scene,{image:FONT,width:cell,height,chars:DIGITS,charsPerRow:DIGITS.length,'offset.x':0,'offset.y':0,'spacing.x':0,'spacing.y':0,lineSpacing:0});
-    scene.cache.bitmapFont.add(FONT,data);
+    const data=Phaser.GameObjects.RetroFont.Parse(scene,{image:HEALTH_FONT,width:cell,height,chars:DIGITS,charsPerRow:DIGITS.length,'offset.x':0,'offset.y':0,'spacing.x':0,'spacing.y':0,lineSpacing:0});
+    scene.cache.bitmapFont.add(HEALTH_FONT,data);
   }
 
   begin(){this.used=0;this.bars.clear();}
@@ -61,7 +61,7 @@ export class EnemyHealth {
     const index=this.used++;
     let entry=this.labels[index];
     if(!entry){
-      const text=this.scene.add.bitmapText(0,0,FONT,'',ADVANCE).setOrigin(.5,1).setDepth(5101);
+      const text=this.scene.add.bitmapText(0,0,HEALTH_FONT,'',ADVANCE).setOrigin(.5,1).setDepth(5101);
       entry={text,hp:-1,max:-1,x:0,y:0,halfWidth:0};this.labels.push(entry);
     }
     if(entry.hp!==hp||entry.max!==max)entry.text.setText(hp+'/'+max);

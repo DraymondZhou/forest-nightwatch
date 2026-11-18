@@ -14,7 +14,7 @@ const store = new SaveStore({
 });
 const audio = new AudioDirector();
 const app = document.querySelector<HTMLDivElement>('#app')!;
-app.innerHTML = '<div id="world"></div><section id="hud" hidden><div id="wound" aria-hidden="true"><svg viewBox="0 0 120 72" focusable="false"><g fill="#8c333e"><path d="M120 5c-9 1-7 9-18 10l-9 0 6 4-8 3 8 2c9 1 8 7 21 4zM120 40c-8-3-12-2-17 2l-11 2 6 4-10 7 15-3c6-2 10 4 17 2z"/><ellipse cx="81" cy="23" rx="4" ry="2"/><ellipse cx="73" cy="32" rx="2" ry="1.4"/><ellipse cx="84" cy="51" rx="3" ry="1.6"/></g></svg></div><div class="vitals"><span id="health"></span><meter id="hp"></meter><meter id="xp"></meter></div><b id="clock"></b><button id="pause" aria-label="暂停">Ⅱ</button><div id="skills"></div><output id="perf"></output><div id="boss"></div><div id="objective"></div><button id="dash" aria-label="叶步闪避" title="叶步 · 空格"><span>叶步</span><small id="dash-time">就绪</small></button></section><section id="panel"></section><aside id="orientation">请旋转手机，横屏守夜</aside>';
+app.innerHTML = '<div id="world"></div><section id="hud" hidden><div id="wound" aria-hidden="true"><svg viewBox="0 0 120 72" focusable="false"><g fill="#8c333e"><path d="M120 5c-9 1-7 9-18 10l-9 0 6 4-8 3 8 2c9 1 8 7 21 4zM120 40c-8-3-12-2-17 2l-11 2 6 4-10 7 15-3c6-2 10 4 17 2z"/><ellipse cx="81" cy="23" rx="4" ry="2"/><ellipse cx="73" cy="32" rx="2" ry="1.4"/><ellipse cx="84" cy="51" rx="3" ry="1.6"/></g></svg></div><div class="vitals"><span id="health"></span><meter id="hp"></meter><meter id="xp"></meter></div><b id="clock"></b><button id="pause" aria-label="暂停">Ⅱ</button><div id="skills"></div><output id="perf"></output><div id="boss"></div><div id="objective"></div><button id="dash" aria-label="叶步闪避" title="叶步 · 空格"><span>叶步</span><small id="dash-time">就绪</small></button></section><section id="panel"></section><aside id="orientation">请旋转手机，横屏游戏</aside>';
 const el = <T extends HTMLElement = HTMLElement>(id:string) => document.getElementById(id) as T;
 const panel = el('panel'), hud = el('hud');
 const battleHud=new BattleHud();
@@ -31,7 +31,7 @@ function home() {
   page='home'; run=undefined; scene.setPaused(true); scene.sim=undefined;
   audio.combat=false; audio.paused=false;
   hud.hidden=true; panel.hidden=false; app.className='cover';
-  panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?action('select','开始守夜　→',true):'<button disabled>正在唤醒森林…</button>'}${action('journal','守夜手记')}${action('settings','设置')}</nav>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
+  panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?action('select','开始游戏',true):'<button disabled>游戏加载中…</button>'}${action('journal','守夜手记')}${action('settings','设置')}</nav>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
 }
 function select() {
   page='select';
@@ -60,12 +60,12 @@ function start(id:CharacterId) {
   if(!ready||!characterUnlocked(store.data,id))return;
   run=new Combat(id,crypto.getRandomValues(new Uint32Array(1))[0]);page='battle';app.className='';
   panel.hidden=true;hud.hidden=false;audio.combat=true;audio.paused=false;
-  battleHud.reset();scene.begin(run);if(portrait.matches)pause();
+  battleHud.reset(store.data.settings.quality==='low');scene.begin(run);if(portrait.matches)pause();
 }
 function pause(){
   if(!run||run.ended||run.pendingLevels||run.giftPending)return;
   page='pause';scene.setPaused(true);audio.paused=true;
-  sheet('本局构筑',buildPanel(run,clock(run.seconds)),action('resume','继续守夜',true)+action('settings','设置')+action('retreat','结束本局'));
+  sheet('本局构筑',buildPanel(run,clock(run.seconds)),action('resume','继续',true)+action('settings','设置')+action('retreat','结束本局'));
   panel.querySelector('.sheet')!.classList.add('build-sheet');
 }
 function resume(){
@@ -76,7 +76,7 @@ function chooseGift(){
   if(!run)return;
   page='gift';scene.setPaused(true);audio.play('level');
   const heal=Math.ceil(run.player.maxHp*.30);
-  sheet('林灯已亮','<p>灯芯留住了这片林间的光。选择一份祝福继续守夜。</p><div class="cards"><button class="card" data-action="gift-spring"><strong>饮泉</strong><span>立即恢复 '+heal+' 生命。当前 '+Math.ceil(run.player.hp)+' / '+run.player.maxHp+'。</span></button><button class="card" data-action="gift-flame"><strong>借火</strong><span>接下来 45 秒，魔法造成的伤害提高 30%。</span></button></div>','');
+  sheet('林灯已亮','<p>灯芯留住了这片林间的光。选择一项祝福。</p><div class="cards"><button class="card" data-action="gift-spring"><strong>饮泉</strong><span>立即恢复 '+heal+' 生命。当前 '+Math.ceil(run.player.hp)+' / '+run.player.maxHp+'。</span></button><button class="card" data-action="gift-flame"><strong>借火</strong><span>接下来 45 秒，魔法造成的伤害提高 30%。</span></button></div>','');
 }
 function afterChoice(){
   if(!run)return;
@@ -103,14 +103,17 @@ function end(){
   const leading=Object.entries(run.damageByWeapon).sort((a,b)=>b[1]-a[1])[0];
   const tactics='点亮林灯 '+run.shrinesLit+' 座　·　成功闪避 '+run.dodges+' 次'+(leading?'　·　主力魔法 '+ability(leading[0] as UpgradeId).name:'');
   lastSummary=`<p>守夜 ${clock(run.seconds)}　·　击败 ${run.kills}　·　等级 ${run.level}</p><p>${tactics}</p><p>${ABILITIES.filter(a=>run!.build[a.id]).map(a=>a.name+' '+run!.build[a.id]).join('　')}</p>${gained.map(id=>`<p>✦ ${ACHIEVEMENTS.find(a=>a.id===id)!.name}</p>`).join('')}<small>${store.warning}</small>`;
-  hud.hidden=true;sheet(run.won?'黎明已至':'守夜结束',lastSummary,action('again','再守一夜',true)+action('home','返回营地'));
+  hud.hidden=true;sheet(run.won?'黎明已至':'守夜结束',lastSummary,action('again','再来一局',true)+action('home','返回主菜单'));
 }
 let shownSkills='';
-function updateHud(s:Combat,fps:number,slow:number) {
-  battleHud.update(s);
+function updateHealth(s:Combat){
   el('health').textContent=`${s.character.name}　${Math.ceil(s.player.hp)} / ${s.player.maxHp}　 Lv.${s.level}`;
-  el<HTMLMeterElement>('hp').value=s.player.hp/s.player.maxHp;el<HTMLMeterElement>('xp').value=s.xp/xpNeeded(s.level);
-  el('clock').textContent=clock(s.seconds);el('perf').textContent=store.data.settings.showFps?`${Math.round(fps)} 平均 FPS · 慢帧 ${slow}`:'';
+  el<HTMLMeterElement>('hp').value=s.player.hp/s.player.maxHp;
+}
+function updateHud(s:Combat,fps:number,low:number) {
+  battleHud.update(s);updateHealth(s);
+  el<HTMLMeterElement>('xp').value=s.xp/xpNeeded(s.level);
+  el('clock').textContent=clock(s.seconds);el('perf').textContent=store.data.settings.showFps?`平均 ${fps?Math.round(fps):"—"} FPS · 1% Low ${low?Math.round(low):"—"} FPS`:'';
   const skills=ABILITIES.filter(a=>s.build[a.id]).map(a=>`<i style="color:${a.color}" title="${a.name}">${a.icon} <small>${s.build[a.id]}</small></i>`).join('');
   if(skills!==shownSkills){el('skills').innerHTML=skills;shownSkills=skills;}
   const boss=s.boss;el('boss').textContent=boss?`古树守卫${boss.phase?' · 狂怒':''}　${Math.ceil(100*boss.hp/boss.maxHp)}%`:'';
@@ -148,7 +151,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden){audio.paus
 el('pause').onclick=pause;
 el('dash').onpointerdown=e=>{if(page==='battle'){e.preventDefault();scene.requestDash();}};
 el('dash').onclick=e=>{if(e.detail===0 && page==='battle')scene.requestDash();};
-const scene=new ForestScene({audio,tick:updateHud,upgrade,end,pause,gift:chooseGift,wound:(x,y,low)=>battleHud.wound(x,y,low), lowQuality:()=>store.data.settings.quality==='low',showEnemyHealth:()=>store.data.settings.showEnemyHealth,showEnemyHealthNumbers:()=>store.data.settings.showEnemyHealthNumbers,
+const scene=new ForestScene({audio,tick:updateHud,health:updateHealth,showFps:()=>store.data.settings.showFps,upgrade,end,pause,gift:chooseGift,wound:(x,y,low)=>battleHud.wound(x,y,low), lowQuality:()=>store.data.settings.quality==='low',showEnemyHealth:()=>store.data.settings.showEnemyHealth,showEnemyHealthNumbers:()=>store.data.settings.showEnemyHealthNumbers,
   ready:()=>{if(!assetError){ready=true;home();}},
   error:message=>{assetError=true;sheet('森林载入失败',`<p>${message}</p>`,'<button id="reload">重新加载</button>');el('reload').onclick=()=>location.reload();}
 });

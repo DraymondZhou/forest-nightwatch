@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import {FrameStats} from './frameStats';
 import hurtFaces from './hurt-faces.json';
 import {InkMarks,MARK} from './marks';
 import {Combat,RITUAL_TIME,type Effect} from './combat';
@@ -6,7 +7,7 @@ import {Combat,RITUAL_TIME,type Effect} from './combat';
 import turnAtlas from './traveler-turns.json';
 import travelerAtlas from './traveler-atlas.json';
 import { enemyPoseFrame, enemyRestFrame } from './enemyPose';
-import { EnemyHealth } from './enemyHealth';
+import { EnemyHealth, HEALTH_FONT } from './enemyHealth';
 import { PickupSprites } from './pickups';
 import { Woodland } from './terrain';
 import { art } from './art';
@@ -15,7 +16,7 @@ import type {AudioDirector} from './audio';
 
 const TINT:Record<string,number>={spark:0xa0ecdf,spore:0xc4d599,leaf:0xe2d79b,ember:0xf2b17a,frost:0xb8d9ef,comet:0xd2b0e5,enemy:0xf29483};
 type VisualEffect=Effect&{life:number;max:number;fromWand?:boolean};
-export interface SceneHooks {tick:(sim:Combat,fps:number,slow:number)=>void;upgrade:()=>void;gift:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean;showEnemyHealth:()=>boolean;showEnemyHealthNumbers:()=>boolean}
+export interface SceneHooks {tick:(sim:Combat,fps:number,low:number)=>void;health:(sim:Combat)=>void;showFps:()=>boolean;upgrade:()=>void;gift:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean;showEnemyHealth:()=>boolean;showEnemyHealthNumbers:()=>boolean}
 export class ForestScene extends Phaser.Scene {
   sim?:Combat;running=false;private hooks:SceneHooks;
   private woods!:Woodland;private worldInk!:Phaser.GameObjects.Graphics;private fxInk!:Phaser.GameObjects.Graphics;
@@ -29,8 +30,9 @@ export class ForestScene extends Phaser.Scene {
   private lastGather = -1;
   private stickState = '';
   private readonly touchControl=matchMedia('(pointer: coarse)');
+  private woundText!:Phaser.GameObjects.BitmapText;
   private texts:Phaser.GameObjects.Text[]=[];private textCursor=0;private effects:VisualEffect[]=[];
-  private keys?:Record<string,Phaser.Input.Keyboard.Key>;private accumulator=0;private uiClock=0;private slowFrames=0;private frames=0;private frameTime=0;private lastPaint=0;
+  private keys?:Record<string,Phaser.Input.Keyboard.Key>;private accumulator=0;private uiClock=0;private readonly frameStats=new FrameStats();
   private stick?:{id:number;x:number;y:number};private movement={x:0,y:0};private stickInk!:Phaser.GameObjects.Graphics;
   constructor(hooks:SceneHooks){super('forest');this.hooks=hooks;}
   preload(){
@@ -48,6 +50,7 @@ export class ForestScene extends Phaser.Scene {
     for(let i=0;i<4;i++)props.add(i,0,i*sheet.width/4,0,sheet.width/4,sheet.height);
     this.fieldMarks=new InkMarks(this,1,360);this.hitMarks=new InkMarks(this,5001,64);
     this.health=new EnemyHealth(this);
+    this.woundText=this.add.bitmapText(0,0,HEALTH_FONT,'',14).setTint(0xffa59c).setDepth(6000).setVisible(false);
     this.woods=new Woodland(this);this.pickups=new PickupSprites(this);
     this.worldInk=this.add.graphics().setDepth(-1);this.fxInk=this.add.graphics().setDepth(5000);this.stickInk=this.add.graphics().setScrollFactor(0).setDepth(10000);
     for(let i=0;i<28;i++)this.texts.push(this.add.text(0,0,'',{fontFamily:'Georgia, serif',fontSize:'17px',color:'#f4dfb4',stroke:'#15332d',strokeThickness:3}).setDepth(6000).setVisible(false));
@@ -68,30 +71,29 @@ export class ForestScene extends Phaser.Scene {
   begin(sim:Combat){
     this.dashQueued=false;
     for(const r of this.remains){r.age=1;r.sprite.setVisible(false);}
+    this.tweens.killTweensOf(this.woundText);this.woundText.setVisible(false);
     this.fxInk.clear();this.worldInk.clear();this.health.begin();this.health.end();
     this.lastGather=-1;this.stickState='';
-    this.sim=sim;this.accumulator=0;this.uiClock=0;this.slowFrames=0;this.frames=0;this.frameTime=0;this.lastPaint=0;this.effects=[];
+    this.sim=sim;this.accumulator=0;this.uiClock=0;this.frameStats.reset();this.effects=[];
     this.sprites.forEach(s=>{s.setVisible(false);this.spritePool.push(s)});this.sprites.clear();this.texts.forEach(t=>t.setVisible(false));
     this.rig?.destroy();this.rig=new WitchRig(this,sim.character.id==='hazel'?0xffffff:sim.character.id==='fern'?0x9ed7ba:0xc8b5ed);this.running=true;
     this.rig.update(0,false,0,false,0);
     this.rig.root.setPosition(sim.player.x,sim.player.y).setDepth(1000);this.cameras.main.centerOn(sim.player.x,sim.player.y);
     this.cameras.main.startFollow(this.rig.root,true,.12,.12);this.cameras.main.setZoom(1);
-    this.hooks.tick(sim,60,0);
+    this.hooks.tick(sim,0,0);
   }
-  setPaused(paused:boolean){this.running=!paused;this.dashQueued=false;this.lastPaint=0;this.movement={x:0,y:0};this.stick=undefined;this.stickInk?.clear();this.stickState='';this.accumulator=0;this.input?.keyboard?.resetKeys();}
+  setPaused(paused:boolean){this.running=!paused;this.dashQueued=false;this.frameStats.reset();this.movement={x:0,y:0};this.stick=undefined;this.stickInk?.clear();this.stickState='';this.accumulator=0;this.input?.keyboard?.resetKeys();}
   update(_time:number,delta:number){
     if(!this.sim||!this.rig||!this.running)return;
     const dt=Math.min(delta/1000,.1);
-    const now=performance.now();
-    if(this.lastPaint){const elapsed=now-this.lastPaint;this.frameTime+=elapsed;this.frames++;if(elapsed>25)this.slowFrames++;}
-    this.lastPaint=now;
+    if(this.hooks.showFps())this.frameStats.record(performance.now());
     const k=this.keys;const input={x:this.movement.x+(k?.D.isDown||k?.RIGHT.isDown?1:0)-(k?.A.isDown||k?.LEFT.isDown?1:0),y:this.movement.y+(k?.S.isDown||k?.DOWN.isDown?1:0)-(k?.W.isDown||k?.UP.isDown?1:0)};
     this.accumulator=Math.min(this.accumulator+dt,.1);
     while(this.accumulator>=1/60&&this.running){
       this.sim.step(1/60,{...input,dash:this.dashQueued});this.dashQueued=false;this.accumulator-=1/60;this.captureEffects();
       if(this.sim.ended){
         this.running=false;
-        this.hooks.tick(this.sim,this.frameTime?1000*this.frames/this.frameTime:0,this.slowFrames);
+        this.hooks.tick(this.sim,this.frameStats.average,this.frameStats.low);
         if(this.sim.player.hp<=0){
           this.rig.fall();const finished=this.sim;
           this.time.delayedCall(380,()=>{if(this.sim===finished)this.hooks.end();});
@@ -104,13 +106,13 @@ export class ForestScene extends Phaser.Scene {
     this.rig.update(dt,this.sim.player.moving,this.sim.player.angle,this.sim.player.invincible>0,this.sim.seconds,this.sim.dashTime);
     this.rig.root.setPosition(this.sim.player.x,this.sim.player.y);
     this.woods.follow(this.sim.player.x,this.sim.player.y,this.sim.seed);this.drawWorld();this.drawRemains(dt);this.drawEffects(this.running?dt:0);this.drawStick();
-    this.uiClock+=dt;if(this.uiClock>.12){this.uiClock=0;this.hooks.tick(this.sim,this.frameTime?1000*this.frames/this.frameTime:0,this.slowFrames);}
+    this.uiClock+=dt;if(this.uiClock>.12){this.uiClock=0;this.hooks.tick(this.sim,this.frameStats.average,this.frameStats.low);}
   }
   private captureEffects(){
     for(const effect of this.sim!.effects){
       if(effect.kind==='wound'){
         const dx=effect.x-effect.tx!,dy=effect.y-effect.ty!;
-        this.hooks.tick(this.sim!,this.frameTime?1000*this.frames/this.frameTime:0,this.slowFrames);
+        this.hooks.health(this.sim!);
         this.rig!.hurt(dx,dy);this.hooks.audio.hurt();this.hooks.wound(-dx,-dy,this.hooks.lowQuality());
       }
       if(effect.kind==='dash'||effect.kind==='evade')this.hooks.audio.play(effect.kind);
@@ -126,8 +128,14 @@ export class ForestScene extends Phaser.Scene {
         this.lastGather=this.sim!.seconds;this.hooks.audio.gather();
       }
       if(effect.kind==='strike')this.hooks.audio.impact((effect.radius??0)>18,effect.weapon);
-      if(effect.kind==='hit'||effect.kind==='wound'||effect.kind==='evade'){
-        if(!this.hooks.lowQuality()){const t=this.texts[this.textCursor++%this.texts.length];this.tweens.killTweensOf(t);t.setPosition(effect.x,effect.y-24).setText(effect.kind==='evade'?'险避':effect.text??'').setVisible(true).setAlpha(1).setColor(effect.kind==='wound'?'#f8a799':effect.kind==='evade'?'#bde7ca':'#f0ddb6');this.tweens.add({targets:t,y:t.y-25,alpha:0,duration:500,onComplete:()=>t.setVisible(false)});}
+      if(effect.kind==='wound'){
+        if(!this.hooks.lowQuality()){
+          const t=this.woundText;this.tweens.killTweensOf(t);
+          t.setText(effect.text??'').setPosition(effect.x,effect.y-24).setVisible(true).setAlpha(1);
+          this.tweens.add({targets:t,y:t.y-25,alpha:0,duration:500,onComplete:()=>t.setVisible(false)});
+        }
+      }else if(effect.kind==='hit'||effect.kind==='evade'){
+        if(!this.hooks.lowQuality()){const t=this.texts[this.textCursor++%this.texts.length];this.tweens.killTweensOf(t);t.setPosition(effect.x,effect.y-24).setText(effect.kind==='evade'?'险避':effect.text??'').setVisible(true).setAlpha(1).setColor(effect.kind==='evade'?'#bde7ca':'#f0ddb6');this.tweens.add({targets:t,y:t.y-25,alpha:0,duration:500,onComplete:()=>t.setVisible(false)});}
 
       }else if(effect.kind==='heal')this.hooks.audio.play('heal');
       if(effect.kind!=='hit'&&effect.kind!=='wound'&&this.effects.length<100){const life=effect.kind==='dash'?.25:effect.kind==='evade'?.32:effect.kind==='strike'?.18:effect.kind==='chain'?.18:effect.kind==='gather'?.22:.5;this.effects.push({...effect,life,max:life,fromWand});}

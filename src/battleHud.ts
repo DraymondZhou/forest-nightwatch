@@ -6,20 +6,31 @@ export class BattleHud {
   private readonly task=document.getElementById('objective')!;
   private readonly cooldown=document.getElementById('dash-time')!;
   private readonly reduced=matchMedia('(prefers-reduced-motion: reduce)');
+  private readonly splash=this.ink.querySelector('svg')!;
   private pulse?:Animation;
+  private quiet?:boolean;
 
-  reset(){this.pulse?.cancel();this.ink.style.opacity='0';}
-
-  wound(dx:number,dy:number,low:boolean){
-    const dist=Math.hypot(dx,dy);
-    this.ink.style.setProperty('--hit-x',(dist?50+dx/dist*48:50)+'%');
-    this.ink.style.setProperty('--hit-y',(dist?50+dy/dist*48:85)+'%');
-    this.ink.style.setProperty('--ink-angle',Math.atan2(dy,dx)+'rad');
-    this.ink.classList.toggle('quiet',low||this.reduced.matches);
+  private prepare(quiet:boolean){
     this.pulse?.cancel();
-    const peak=low||this.reduced.matches? .42 : .88;
+    const peak=quiet?.42:.88;
     this.pulse=this.ink.animate([{opacity:peak,offset:0},{opacity:peak*.75,offset:.18},{opacity:0}],
       {duration:this.reduced.matches?260:460,easing:'ease-out'});
+    this.pulse.cancel();
+    this.quiet=quiet;this.ink.classList.toggle('quiet',quiet);
+  }
+
+  reset(low:boolean){this.prepare(low||this.reduced.matches);}
+
+  wound(dx:number,dy:number,low:boolean){
+    const quiet=low||this.reduced.matches;
+    if(!this.pulse||quiet!==this.quiet)this.prepare(quiet);
+    if(!quiet){
+      const dist=Math.hypot(dx,dy);
+      this.splash.style.left=(dist?50+48*dx/dist:50)+'%';
+      this.splash.style.top=(dist?50+48*dy/dist:85)+'%';
+      this.splash.style.transform='translate(-84%,-50%) rotate('+Math.atan2(dy,dx)+'rad)';
+    }
+    this.pulse!.currentTime=0;this.pulse!.play();
   }
 
   update(s:Combat){
