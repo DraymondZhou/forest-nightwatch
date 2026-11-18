@@ -13,7 +13,7 @@ export class ForestScene extends Phaser.Scene {
   private worldInk!:Phaser.GameObjects.Graphics;private fxInk!:Phaser.GameObjects.Graphics;
   private rig?:WitchRig;private sprites=new Map<number,Phaser.GameObjects.Image>();private spritePool:Phaser.GameObjects.Image[]=[];
   private texts:Phaser.GameObjects.Text[]=[];private textCursor=0;private effects:VisualEffect[]=[];
-  private keys?:Record<string,Phaser.Input.Keyboard.Key>;private accumulator=0;private uiClock=0;private slowFrames=0;
+  private keys?:Record<string,Phaser.Input.Keyboard.Key>;private accumulator=0;private uiClock=0;private slowFrames=0;private frames=0;private frameTime=0;private lastPaint=0;
   private stick?:{id:number;x:number;y:number};private movement={x:0,y:0};private stickInk!:Phaser.GameObjects.Graphics;
   constructor(hooks:SceneHooks){super('forest');this.hooks=hooks;}
   preload(){
@@ -39,29 +39,33 @@ export class ForestScene extends Phaser.Scene {
     this.hooks.ready();
   }
   begin(sim:Combat){
-    this.sim=sim;this.accumulator=0;this.uiClock=0;this.slowFrames=0;this.effects=[];
+    this.sim=sim;this.accumulator=0;this.uiClock=0;this.slowFrames=0;this.frames=0;this.frameTime=0;this.lastPaint=0;this.effects=[];
     this.sprites.forEach(s=>{s.setVisible(false);this.spritePool.push(s)});this.sprites.clear();this.texts.forEach(t=>t.setVisible(false));
-    this.rig?.destroy();this.rig=new WitchRig(this);this.running=true;
+    this.rig?.destroy();this.rig=new WitchRig(this,sim.character.id==='hazel'?0xffffff:sim.character.id==='fern'?0x9ed7ba:0xc8b5ed);this.running=true;
     this.cameras.main.startFollow(this.rig.root,true,.12,.12);this.cameras.main.setZoom(1);
     this.hooks.tick(sim,60,0);
   }
-  setPaused(paused:boolean){this.running=!paused;this.movement={x:0,y:0};this.stick=undefined;this.stickInk?.clear();this.accumulator=0;this.input?.keyboard?.resetKeys();}
+  setPaused(paused:boolean){this.running=!paused;this.lastPaint=0;this.movement={x:0,y:0};this.stick=undefined;this.stickInk?.clear();this.accumulator=0;this.input?.keyboard?.resetKeys();}
   update(_time:number,delta:number){
     if(!this.sim||!this.rig)return;
-    const dt=Math.min(delta/1000,.1);if(delta>25)this.slowFrames++;
+    const dt=Math.min(delta/1000,.1);if(this.running){
+      const now=performance.now();
+      if(this.lastPaint){const elapsed=now-this.lastPaint;this.frameTime+=elapsed;this.frames++;if(elapsed>25)this.slowFrames++;}
+      this.lastPaint=now;
+    }
     if(this.running){
       const k=this.keys;const input={x:this.movement.x+(k?.D.isDown||k?.RIGHT.isDown?1:0)-(k?.A.isDown||k?.LEFT.isDown?1:0),y:this.movement.y+(k?.S.isDown||k?.DOWN.isDown?1:0)-(k?.W.isDown||k?.UP.isDown?1:0)};
       this.accumulator=Math.min(this.accumulator+dt,.1);
       while(this.accumulator>=1/60&&this.running){
         this.sim.step(1/60,input);this.accumulator-=1/60;this.captureEffects();
-        if(this.sim.ended){this.running=false;this.hooks.end();break;}
+        if(this.sim.ended){this.running=false;if(this.sim.player.hp<=0)this.rig.fall();this.hooks.end();break;}
         if(this.sim.pendingLevels>0){this.running=false;this.hooks.upgrade();break;}
       }
       this.rig.update(dt,this.sim.player.moving,this.sim.player.angle,this.sim.player.invincible>0,this.sim.seconds);
     }
     this.rig.root.setPosition(this.sim.player.x,this.sim.player.y).setDepth(this.sim.player.y);
     this.drawWorld();this.drawEffects(this.running?dt:0);this.drawStick();
-    this.uiClock+=dt;if(this.uiClock>.12){this.uiClock=0;this.hooks.tick(this.sim,this.game.loop.actualFps,this.slowFrames);}
+    this.uiClock+=dt;if(this.uiClock>.12){this.uiClock=0;this.hooks.tick(this.sim,this.frameTime?1000*this.frames/this.frameTime:0,this.slowFrames);}
   }
   private captureEffects(){
     for(const effect of this.sim!.effects){

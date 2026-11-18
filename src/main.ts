@@ -90,7 +90,7 @@ let shownSkills='';
 function updateHud(s:Combat,fps:number,slow:number) {
   el('health').textContent=`${s.character.name}　${Math.ceil(s.player.hp)} / ${s.player.maxHp}　 Lv.${s.level}`;
   el<HTMLMeterElement>('hp').value=s.player.hp/s.player.maxHp;el<HTMLMeterElement>('xp').value=s.xp/xpNeeded(s.level);
-  el('clock').textContent=clock(s.seconds);el('perf').textContent=store.data.settings.showFps?`${Math.round(fps)} FPS · 慢帧 ${slow}`:'';
+  el('clock').textContent=clock(s.seconds);el('perf').textContent=store.data.settings.showFps?`${Math.round(fps)} 平均 FPS · 慢帧 ${slow}`:'';
   const skills=ABILITIES.filter(a=>s.build[a.id]).map(a=>`<i style="color:${a.color}" title="${a.name}">${a.icon} <small>${s.build[a.id]}</small></i>`).join('');
   if(skills!==shownSkills){el('skills').innerHTML=skills;shownSkills=skills;}
   const boss=s.boss;el('boss').textContent=boss?`古树守卫　${Math.ceil(100*boss.hp/boss.maxHp)}%`:'';

@@ -9,10 +9,10 @@ export class WitchRig {
   private forearm:Phaser.GameObjects.Container;
   private leftLeg:Phaser.GameObjects.Container;private rightLeg:Phaser.GameObjects.Container;
   private clock=0;private facing=1;
-  constructor(scene:Phaser.Scene){
+  constructor(scene:Phaser.Scene, palette:number){
     this.root=scene.add.container(0,0);
     const bone=(parent:Phaser.GameObjects.Container,x:number,y:number)=>{const b=scene.add.container(x,y);parent.add(b);return b;};
-    const attach=(parent:Phaser.GameObjects.Container,key:string,w:number,h:number,originY=0,originX=.5)=>{const sprite=scene.add.image(0,0,key).setDisplaySize(w,h).setOrigin(originX,originY);parent.add(sprite);return sprite;};
+    const attach=(parent:Phaser.GameObjects.Container,key:string,w:number,h:number,originY=0,originX=.5)=>{const sprite=scene.add.image(0,0,key).setDisplaySize(w,h).setOrigin(originX,originY);if(key==='hero-body'||key==='hero-head')sprite.setTint(palette);parent.add(sprite);return sprite;};
     this.leftLeg=bone(this.root,-7,5);attach(this.leftLeg,'hero-left-leg',12,23,.15);
     this.rightLeg=bone(this.root,7,5);attach(this.rightLeg,'hero-right-leg',12,23,.15);
     this.body=bone(this.root,0,-19);attach(this.body,'hero-body',34,36,.05);
@@ -31,5 +31,6 @@ export class WitchRig {
     this.body.rotation=moving?Math.cos(this.clock)*.025:0;this.head.rotation=Math.sin(this.clock*.5)*.025;
     this.leftArm.rotation=-stride*.6+.08;this.rightArm.rotation=-.35+Math.sin(seconds*5)*.16;this.forearm.rotation=-.35+Math.sin(seconds*5+.5)*.12;
   }
+  fall(){this.root.scene.tweens.add({targets:this.root,angle:-70,alpha:.5,duration:350});}
   destroy(){this.root.destroy(true);}
 }

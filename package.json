@@ -1,6 +1,6 @@
 {
   "name": "forest-nightwatch",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,6 +10,12 @@
     "test": "vitest run",
     "check": "tsc --noEmit"
   },
-  "dependencies": { "phaser": "^3.90.0" },
-  "devDependencies": { "typescript": "~5.9.3", "vite": "^7.2.2", "vitest": "^4.0.8" }
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vite": "^7.2.2",
+    "vitest": "^4.0.8"
+  }
 }

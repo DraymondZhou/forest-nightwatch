@@ -10,7 +10,7 @@ export interface Drop {id:number;x:number;y:number;value:number;kind:'xp'|'heal'
 export interface Effect {kind:'hit'|'chain'|'burst'|'frost'|'heal'|'level'|'synergy';x:number;y:number;tx?:number;ty?:number;radius?:number;color?:number;text?:string}
 export interface Controls {x:number;y:number}
 const distance2=(a:{x:number;y:number},b:{x:number;y:number})=>(a.x-b.x)**2+(a.y-b.y)**2;
-const ENEMY_STATS:Record<EnemyKind,[number,number,number,number]>={slime:[22,48,17,9],moth:[16,86,13,7],twig:[30,105,15,10],spitter:[36,40,19,9],beetle:[74,42,24,13],brute:[440,52,38,18],crystal:[300,65,30,16],boss:[5400,30,62,24]};
+const ENEMY_STATS:Record<EnemyKind,[number,number,number,number]>={slime:[22,48,17,9],moth:[16,86,13,7],twig:[30,105,15,10],spitter:[36,40,19,9],beetle:[74,42,24,13],brute:[440,52,38,18],crystal:[300,65,30,16],boss:[6400,34,62,21]};
 
 export class Combat {
   readonly rng:Random; readonly character; readonly seed:number;
@@ -45,12 +45,12 @@ export class Combat {
       for(const e of this.enemyGrid.get(`${gx},${gy}`)??[])if(e.hp>0&&(e.x-x)**2+(e.y-y)**2<=(r+e.radius)**2)found.push(e);
     }return found;
   }
-  private nearest(x=this.player.x,y=this.player.y,max=650):Enemy|undefined {
-    let target:Enemy|undefined;let best=max*max; for(const e of this.enemies){if(e.hp<=0)continue;const d=(e.x-x)**2+(e.y-y)**2;if(d<best){best=d;target=e;}}return target;
+  private nearest(x=this.player.x,y=this.player.y,max=270):Enemy|undefined {
+    let target:Enemy|undefined;let best=max*max; for(const e of this.enemies){if(e.hp<=0)continue;const d=(e.x-x)**2+(e.y-y)**2;if(e.kind==='boss'&&d<max*max*.75)return e;if(d<best){best=d;target=e;}}return target;
   }
   spawn(kind:EnemyKind,x?:number,y?:number) {
     if(this.enemies.length>=150&&kind!=='boss')return;
-    const angle=this.rng.between(0,Math.PI*2);const radius=this.rng.between(490,640);
+    const angle=this.rng.between(0,Math.PI*2);const radius=this.seconds<15?this.rng.between(120,220):this.rng.between(330,500);
     const [baseHp,speed,size,attack]=ENEMY_STATS[kind];const scale=kind==='boss'?1:1+this.seconds/165;
     const enemy:Enemy={id:this.nextId(),kind,x:clamp(x??this.player.x+Math.cos(angle)*radius,50,WORLD.width-50),y:clamp(y??this.player.y+Math.sin(angle)*radius,50,WORLD.height-50),hp:baseHp*scale,maxHp:baseHp*scale,radius:size,speed,attack,phase:0,clock:this.rng.between(1,3),slow:0,burn:0,burnClock:0,spore:0,proc:0,flash:0};
     this.enemies.push(enemy);return enemy;
@@ -87,7 +87,7 @@ export class Combat {
     this.shots.push({id:this.nextId(),x:this.player.x,y:this.player.y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:2,radius:weapon==='comet'?10:7,damage,weapon,pierce,hit:new Set()});
   }
   private cast(weapon:WeaponId,level:number) {
-    const target=this.nearest();if(!target)return;
+    const target=this.nearest(this.player.x,this.player.y,weapon==='comet'?480:weapon==='ember'?350:240);if(!target)return;
     const scale=(1+(level-1)*0.34)*this.power;
     if(weapon==='spark'){
       let current=target;let previous:{x:number;y:number}=this.player;const visited=new Set<number>();
@@ -170,12 +170,12 @@ export class Combat {
     for(const e of this.enemies)if(e.hp<=0){
       this.kills++;const elite=['boss','brute','crystal'].includes(e.kind);const value=elite?24:3;
       // Merge overflow XP rather than dropping rewards when a player circles the arena.
-      if(this.drops.length<300)this.drops.push({id:this.nextId(),x:e.x,y:e.y,value,kind:'xp'});else this.drops[this.drops.length-1].value+=value;
-      if(elite||this.rng.next()<0.025)this.drops.push({id:this.nextId(),x:e.x+12,y:e.y,value:elite?22:12,kind:'heal'});
+      if(this.drops.length<300)this.drops.push({id:this.nextId(),x:e.x,y:e.y,value,kind:'xp'});else {const existing=this.drops.find(d=>d.kind==='xp');if(existing)existing.value+=value;}
+      if(this.drops.length<320&&(elite||this.rng.next()<0.025))this.drops.push({id:this.nextId(),x:e.x+12,y:e.y,value:elite?22:12,kind:'heal'});
       if(e.kind==='boss'){this.won=true;this.ended=true;}
     }
     this.enemies=this.enemies.filter(e=>e.hp>0);
-    const pickup=(65+(this.build.reach??0)*12)*(this.character.id==='hazel'?1.2:1);
+    const pickup=(98+(this.build.reach??0)*12)*(this.character.id==='hazel'?1.2:1);
     this.drops=this.drops.filter(d=>{
       const dist=Math.hypot(d.x-p.x,d.y-p.y);if(dist<pickup){const step=320*dt;d.x+=(p.x-d.x)/Math.max(1,dist)*Math.min(step,dist);d.y+=(p.y-d.y)/Math.max(1,dist)*Math.min(step,dist);}
       if(dist>22)return true;
