@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import './style.css';
 import { AudioDirector } from './audio';
+import { buildPanel } from './buildPanel';
 import { BattleHud } from './battleHud';
 import { Combat } from './combat';
 import { ForestScene } from './scene';
@@ -64,7 +65,8 @@ function start(id:CharacterId) {
 function pause(){
   if(!run||run.ended||run.pendingLevels||run.giftPending)return;
   page='pause';scene.setPaused(true);audio.paused=true;
-  sheet('林间歇息',`<p>${clock(run.seconds)}　·　击败 ${run.kills}　·　等级 ${run.level}</p>`,action('resume','继续守夜',true)+action('settings','设置')+action('retreat','结束本局'));
+  sheet('本局构筑',buildPanel(run,clock(run.seconds)),action('resume','继续守夜',true)+action('settings','设置')+action('retreat','结束本局'));
+  panel.querySelector('.sheet')!.classList.add('build-sheet');
 }
 function resume(){
   if(!run||run.ended||portrait.matches||document.hidden)return;

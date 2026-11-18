@@ -13,6 +13,7 @@ export interface Shrine {x:number;y:number;charge:number;expires:number}
 export type ShrineGift = 'spring' | 'flame';
 export const RITUAL_TIME = 3.2;
 const DASH_TIME = .2;
+const BASE_INTERVAL:Record<WeaponId,number>={spark:.95,spore:2.4,ember:1.05,frost:2.1,comet:1.2,leaf:.4};
 const distance2=(a:{x:number;y:number},b:{x:number;y:number})=>(a.x-b.x)**2+(a.y-b.y)**2;
 const ENEMY_STATS:Record<EnemyKind,[number,number,number,number]>={slime:[22,48,17,9],moth:[16,86,13,7],twig:[30,105,15,10],spitter:[36,40,19,9],beetle:[74,42,24,13],brute:[440,52,38,18],crystal:[300,65,30,16],boss:[6400,34,62,21]};
 
@@ -40,6 +41,9 @@ export class Combat {
   get power() {return (1+(this.build.power??0)*0.12)*(this.flameTime>0?1.30:1);}
   get reach() {return 1+(this.build.reach??0)*0.1;}
   get haste() {return 1-(this.build.haste??0)*0.07;}
+  get walkSpeed(){return this.character.speed*(1+(this.build.stride??0)*.08);}
+  get xpMultiplier(){return 1+(this.build.fortune??0)*.1;}
+  attackInterval(weapon:WeaponId){return BASE_INTERVAL[weapon]*this.haste;}
   private nextId(){return this.id++;}
   addUpgrade(id:UpgradeId) {
     const max=ABILITIES.find(a=>a.id===id)!.max;
@@ -179,7 +183,7 @@ export class Combat {
     }
     p.moving=length>.05||dashStep>0;
     if(length>.05 && dt>dashStep){
-      const travel=this.character.speed*(1+(this.build.stride??0)*.08)*(dt-dashStep)/Math.max(1,length);
+      const travel=this.walkSpeed*(dt-dashStep)/Math.max(1,length);
       p.x+=control.x*travel;p.y+=control.y*travel;p.angle=Math.atan2(control.y,control.x);
     }
   }
@@ -246,10 +250,10 @@ export class Combat {
     for(const [id,value] of Object.entries(this.build)){
       const weapon=id as WeaponId;if(!['spark','spore','ember','frost','comet'].includes(id))continue;
       this.weaponClocks[weapon]=(this.weaponClocks[weapon]??0)-dt;
-      if(this.weaponClocks[weapon]!<=0){this.weaponClocks[weapon]=({spark:0.95,spore:2.4,ember:1.05,frost:2.1,comet:1.2,leaf:1}[weapon])*this.haste;this.cast(weapon,value!);}
+      if(this.weaponClocks[weapon]!<=0){this.weaponClocks[weapon]=this.attackInterval(weapon);this.cast(weapon,value!);}
     }
     this.leafClock-=dt;
-    if(this.build.leaf&&this.leafClock<=0){this.leafClock=0.4*this.haste;const r=(80+this.build.leaf*7)*this.reach;for(const e of this.nearby(p.x,p.y,r))this.hit(e,10*(1+this.build.leaf*.4)*this.power,'leaf');}
+    if(this.build.leaf&&this.leafClock<=0){this.leafClock=this.attackInterval('leaf');const r=(80+this.build.leaf*7)*this.reach;for(const e of this.nearby(p.x,p.y,r))this.hit(e,10*(1+this.build.leaf*.4)*this.power,'leaf');}
     for(const z of this.zones){z.life-=dt;z.timer+=dt;z.tick-=dt;
       if(z.kind==='warning'){if(z.life<=0){if(distance2(p,z)<(z.radius+12)**2)this.hurt(z.damage,z.x,z.y);this.effect({kind:'burst',x:z.x,y:z.y,radius:z.radius,color:0xe77e70});}continue;}
       if(z.tick<=0){z.tick=0.5;for(const e of this.nearby(z.x,z.y,z.radius)){this.hit(e,z.damage,z.kind,true);if(z.kind==='spore')e.spore=2;else e.burn=2;}}
@@ -291,7 +295,7 @@ export class Combat {
       d.x+=(p.x-d.x)*travel;d.y+=(p.y-d.y)*travel;
       if(dist>22)return true;
       if(d.kind==='heal'){p.hp=Math.min(p.maxHp,p.hp+d.value);this.effect({kind:'heal',x:p.x,y:p.y,text:`+${d.value}`});}
-      else {this.xp+=d.value*(1+(this.build.fortune??0)*.1);gathered=true;}
+      else {this.xp+=d.value*this.xpMultiplier;gathered=true;}
       return false;
     });
     if(gathered)this.effect({kind:'gather',x:p.x,y:p.y+6,color:0xf4cf78,radius:15});
