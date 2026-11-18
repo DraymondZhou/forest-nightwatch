@@ -68,3 +68,12 @@
 
 .options .health-numbers {padding-inline-start:1em}
 .options .health-numbers:has(input:disabled) {opacity:.52}
+
+.difficulty{border:0;padding:0;margin:0;display:flex;align-items:center;gap:6px}
+.difficulty legend{float:left;margin-right:12px;font-weight:600}
+.difficulty label{position:relative;cursor:pointer}
+.difficulty input{position:absolute;opacity:0}
+.difficulty span{display:block;padding:7px 15px;border:1px solid #65816c;border-radius:6px}
+.difficulty input:checked+span{background:#e6d398;color:#1b332a;border-color:#eedfaa}
+.difficulty input:focus-visible+span{outline:2px solid #fbe9a6;outline-offset:2px}
+#mode-hint{font-size:.88em;margin:7px 0 12px}

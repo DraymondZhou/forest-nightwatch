@@ -4,6 +4,7 @@ import { AudioDirector } from './audio';
 import { buildPanel } from './buildPanel';
 import type { FrameStats } from './frameStats';
 import { BattleHud } from './battleHud';
+import {DIFFICULTIES,readDifficulty,type Difficulty} from './difficulty';
 import { Combat } from './combat';
 import { ForestScene } from './scene';
 import { ABILITIES, ACHIEVEMENTS, CHARACTERS, SYNERGIES, ability, type CharacterId, type UpgradeId } from './content';
@@ -40,7 +41,9 @@ function select() {
     const open=characterUnlocked(store.data,c.id);
     return `<button class="card" data-action="play-${c.id}" ${open?'':'disabled'}><b class="rune">${ability(c.weapon).icon}</b><small>${c.title}</small><strong>${c.name}</strong><span>${open?c.description.split('\n')[0]:c.unlock}</span></button>`;
   }).join('');
-  sheet('选择守夜人',`<div class="cards">${cards}</div><p>方向键或左侧摇杆移动，魔法自动攻击。空格或右侧「叶步」可闪避，擦过攻击时会吸引附近种荚。途中可点亮林灯，六分钟后迎战古树守卫。</p>`,action('home','返回'));
+  const difficulty=store.data.settings.difficulty;
+  const modes=(Object.keys(DIFFICULTIES) as Difficulty[]).map(id=>`<label><input type="radio" name="difficulty" data-key="difficulty" value="${id}" ${id===difficulty?'checked':''}><span>${DIFFICULTIES[id].label}</span></label>`).join('');
+  sheet('选择角色',`<fieldset class="difficulty"><legend>本局难度</legend>${modes}</fieldset><p id="mode-hint" aria-live="polite">${DIFFICULTIES[difficulty].description}</p><div class="cards">${cards}</div><p>方向键或左侧摇杆移动，魔法自动攻击。空格或右侧「叶步」可闪避，擦过攻击时会吸引附近种荚。甲虫的护甲能抵挡范围冲击，直击和持续伤害有效。六分钟后迎战古树守卫。</p>`,action('home','返回'));
 }
 function journal() {
   page='journal';
@@ -59,7 +62,7 @@ function settings() {
 function syncAudio(){audio.music=store.data.settings.music;audio.sound=store.data.settings.sound;}
 function start(id:CharacterId) {
   if(!ready||!characterUnlocked(store.data,id))return;
-  run=new Combat(id,crypto.getRandomValues(new Uint32Array(1))[0]);page='battle';app.className='';
+  run=new Combat(id,crypto.getRandomValues(new Uint32Array(1))[0],store.data.settings.difficulty);page='battle';app.className='';
   panel.hidden=true;hud.hidden=false;audio.combat=true;audio.paused=false;
   battleHud.reset(store.data.settings.quality==='low');scene.begin(run);if(portrait.matches)pause();
 }
@@ -103,7 +106,7 @@ function end(){
   const gained=finishRun(store.data,run.summary());store.write();page='result';
   const leading=Object.entries(run.damageByWeapon).sort((a,b)=>b[1]-a[1])[0];
   const tactics='点亮林灯 '+run.shrinesLit+' 座　·　成功闪避 '+run.dodges+' 次'+(leading?'　·　主力魔法 '+ability(leading[0] as UpgradeId).name:'');
-  lastSummary=`<p>守夜 ${clock(run.seconds)}　·　击败 ${run.kills}　·　等级 ${run.level}</p><p>${tactics}</p><p>${ABILITIES.filter(a=>run!.build[a.id]).map(a=>a.name+' '+run!.build[a.id]).join('　')}</p>${gained.map(id=>`<p>✦ ${ACHIEVEMENTS.find(a=>a.id===id)!.name}</p>`).join('')}<small>${store.warning}</small>`;
+  lastSummary=`<p>${run.rules.label}　·　守夜 ${clock(run.seconds)}　·　击败 ${run.kills}　·　等级 ${run.level}</p><p>${tactics}</p><p>${ABILITIES.filter(a=>run!.build[a.id]).map(a=>a.name+' '+run!.build[a.id]).join('　')}</p>${gained.map(id=>`<p>✦ ${ACHIEVEMENTS.find(a=>a.id===id)!.name}</p>`).join('')}<small>${store.warning}</small>`;
   hud.hidden=true;sheet(run.won?'黎明已至':'守夜结束',lastSummary,action('again','再来一局',true)+action('home','返回主菜单'));
 }
 let shownSkills='';
@@ -132,6 +135,10 @@ panel.onclick=e=>{
 };
 panel.oninput=e=>{
   const input=e.target as HTMLInputElement;const key=input.dataset.key;
+  if(key==='difficulty' && page==='select'){
+    const difficulty=readDifficulty(input.value);store.data.settings.difficulty=difficulty;store.write();
+    el('mode-hint').textContent=DIFFICULTIES[difficulty].description;return;
+  }
   if(key==='music'||key==='sound')store.data.settings[key]=Number(input.value);
   else if(key==='quality')store.data.settings.quality=input.checked?'low':'high';
   else if(key==='showEnemyHealth'){

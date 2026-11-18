@@ -77,7 +77,7 @@ describe('elemental identities',()=>{
     const sim=practice();sim.build={spark:1};
     const target=sim.spawn('brute',sim.player.x+60,sim.player.y)!;
     sim.step(dt,idle);
-    expect(target.maxHp-target.hp).toBeCloseTo(33);
+    expect(target.maxHp-target.hp).toBeCloseTo(18+2*1.5);
   });
   it('crystallizes an already chilled enemy on the second wave',()=>{
     const sim=practice();sim.build={frost:1};

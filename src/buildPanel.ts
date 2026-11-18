@@ -34,7 +34,7 @@ export function buildPanel(run:Combat,time:string) {
   const links=activeSynergies(run.build).map(s=>`<div class="build-link"><b>${s.name}</b>
     <small>${ability(s.a).name} ＋ ${ability(s.b).name}</small><p>${s.description}</p></div>`).join('');
   const gifts=run.flameTime>0?`<p class="flame-note">借火　伤害 +30% · 剩余 ${Math.ceil(run.flameTime)} 秒</p>`:'';
-  return `<div class="run-readout"><strong>${run.character.name}</strong><span>等级 ${run.level}</span>
+  return `<div class="run-readout"><strong>${run.character.name}</strong><span>${run.rules.label}难度</span><span>等级 ${run.level}</span>
     <span>击败 ${run.kills}</span><time>${time}</time></div>
     <div class="build-scroll" tabindex="0" role="region" aria-label="本局构筑详情"><div class="build-columns">
       <section><h3>已选魔法</h3>${group('weapon')}

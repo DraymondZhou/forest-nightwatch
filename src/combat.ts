@@ -2,6 +2,7 @@ import { CHARACTERS, ABILITIES, type CharacterId, type UpgradeId, type WeaponId 
 import { Random, xpNeeded, activeSynergies, type Build, type RunSummary } from './model';
 
 
+import { DIFFICULTIES,rampDifficulty,type Difficulty } from './difficulty';
 import { ATTACK_POSE_TIME } from './enemyPose';
 
 export type EnemyKind='slime'|'moth'|'twig'|'spitter'|'beetle'|'brute'|'crystal'|'boss';
@@ -15,9 +16,12 @@ export interface Shrine {x:number;y:number;charge:number;expires:number}
 export type ShrineGift = 'spring' | 'flame';
 export const RITUAL_TIME = 3.2;
 const DASH_TIME = .2;
+// Later ranks still unlock jumps, extra projectiles or area. Raw damage grows more slowly.
+const SPELL_DAMAGE=[0,1,1.30,1.55,1.76,1.94];
+const CAST_INTERVAL=[1,.93,.875,.83,.80];
 const BASE_INTERVAL:Record<WeaponId,number>={spark:.95,spore:2.4,ember:1.05,frost:2.1,comet:1.2,leaf:.4};
 const distance2=(a:{x:number;y:number},b:{x:number;y:number})=>(a.x-b.x)**2+(a.y-b.y)**2;
-const ENEMY_STATS:Record<EnemyKind,[number,number,number,number]>={slime:[22,48,17,9],moth:[16,86,13,7],twig:[30,105,15,10],spitter:[36,40,19,9],beetle:[74,42,24,13],brute:[440,52,38,18],crystal:[300,65,30,16],boss:[6400,34,62,21]};
+const ENEMY_STATS:Record<EnemyKind,[number,number,number,number]>={slime:[22,48,17,9],moth:[16,86,13,7],twig:[30,105,15,10],spitter:[36,40,19,9],beetle:[74,42,24,13],brute:[440,52,38,18],crystal:[300,65,30,16],boss:[5100,34,62,21]};
 
 export class Combat {
   readonly rng:Random; readonly character; readonly seed:number;
@@ -33,16 +37,17 @@ export class Combat {
   private nextEnemy: number[] = [];
   private shotCandidates: Enemy[] = [];
   private leafClock=0;private ticks=0;
-  constructor(characterId:CharacterId,seed:number) {
+  constructor(characterId:CharacterId,seed:number,readonly difficulty:Difficulty='normal') {
     this.character=CHARACTERS.find(c=>c.id===characterId)!;this.seed=seed;this.rng=new Random(seed);
     this.gridHeads.fill(-1);
     this.player.hp=this.player.maxHp=this.character.hp;this.build[this.character.weapon]=1;
   }
+  get rules(){return DIFFICULTIES[this.difficulty];}
   get pickupRadius(){return (98+(this.build.reach??0)*12)*(this.character.id==='hazel'?1.2:1)+(this.harvestTime>0?145:0);}
   get boss() {return this.enemies.find(e=>e.kind==='boss');}
-  get power() {return (1+(this.build.power??0)*0.12)*(this.flameTime>0?1.30:1);}
+  get power() {return (1+(this.build.power??0)*0.10)*(this.flameTime>0?1.30:1);}
   get reach() {return 1+(this.build.reach??0)*0.1;}
-  get haste() {return 1-(this.build.haste??0)*0.07;}
+  get haste() {return CAST_INTERVAL[this.build.haste??0];}
   get walkSpeed(){return this.character.speed*(1+(this.build.stride??0)*.08);}
   get xpMultiplier(){return 1+(this.build.fortune??0)*.1;}
   attackInterval(weapon:WeaponId){return BASE_INTERVAL[weapon]*this.haste;}
@@ -86,8 +91,10 @@ export class Combat {
   spawn(kind:EnemyKind,x?:number,y?:number) {
     if(this.enemies.length>=150&&kind!=='boss')return;
     const angle=this.rng.between(0,Math.PI*2);const radius=this.seconds<15?this.rng.between(120,220):this.rng.between(330,500);
-    const [baseHp,speed,size,attack]=ENEMY_STATS[kind];const scale=kind==='boss'?1:1+this.seconds/165;
-    const enemy:Enemy={id:this.nextId(),kind,x:x??this.player.x+Math.cos(angle)*radius,y:y??this.player.y+Math.sin(angle)*radius,hp:baseHp*scale,maxHp:baseHp*scale,radius:size,speed,attack,phase:0,clock:this.rng.between(1,3),slow:0,frozen:0,burn:0,burnClock:0,spore:0,proc:0,flash:0,hitAngle:0,gait:0,attackPose:0};
+    const [baseHp,speed,size,attack]=ENEMY_STATS[kind];// Moths remain fragile. A late sturdy enemy should survive even an upgraded opening volley.
+    const growthSeconds=kind==='moth'?300:kind==='slime'||kind==='beetle'?140:165;
+    const scale=kind==='boss'?this.rules.bossHealth:1+this.seconds/growthSeconds;
+    const enemy:Enemy={id:this.nextId(),kind,x:x??this.player.x+Math.cos(angle)*radius,y:y??this.player.y+Math.sin(angle)*radius,hp:baseHp*scale,maxHp:baseHp*scale,radius:size,speed:speed*rampDifficulty(this.rules.speed,this.seconds),attack:Math.round(attack*rampDifficulty(this.rules.damage,this.seconds)),phase:0,clock:this.rng.between(1,3),slow:0,frozen:0,burn:0,burnClock:0,spore:0,proc:0,flash:0,hitAngle:0,gait:0,attackPose:0};
     this.enemies.push(enemy);return enemy;
   }
   private effect(effect:Effect){if(this.effects.length<100)this.effects.push(effect);}
@@ -107,8 +114,10 @@ export class Combat {
       color:0xf19a8a,radius:amount,text:'−'+Math.round(amount)});
     if(this.player.hp<=0)this.ended=true;
   }
-  private hit(e:Enemy,damage:number,weapon:WeaponId,secondary=false,fromAngle?:number) {
+  private hit(e:Enemy,damage:number,weapon:WeaponId,secondary=false,fromAngle?:number,area=false) {
     if(e.hp<=0)return;
+    // A beetle's shell absorbs broad impacts. Direct spells, poison and burn still deal full damage.
+    if(e.kind==='beetle' && (area||weapon==='leaf'||weapon==='frost'))damage*=.48;
     const applied=Math.min(e.hp,damage);e.hp-=damage;e.flash=0.08;
     this.damageByWeapon[weapon]=(this.damageByWeapon[weapon]??0)+applied;
     const angle = fromAngle ?? Math.atan2(e.y-this.player.y,e.x-this.player.x);
@@ -123,13 +132,13 @@ export class Combat {
     if(!secondary&&e.proc<=0){
       if(weapon==='spark'&&e.spore>0&&this.build.spore){
         e.spore=0;e.proc=1.2;this.effect({kind:'synergy',x:e.x,y:e.y,radius:65,color:0xb5e9ae});
-        for(const n of this.nearby(e.x,e.y,65))this.hit(n,12*this.power,'spark',true);
+        for(const n of this.nearby(e.x,e.y,65))this.hit(n,12*this.power,'spark',true,undefined,true);
       }else if(weapon==='leaf'&&e.burn>0&&this.build.ember){
         e.burn=Math.min(5,e.burn+0.7);e.proc=1;this.effect({kind:'burst',x:e.x,y:e.y,radius:42,color:0xf0b77a});
         for(const n of this.nearby(e.x,e.y,42))this.hit(n,10*this.power,'leaf',true);
       }else if(weapon==='comet'&&e.slow>0&&this.build.frost){
         e.proc=1;this.effect({kind:'burst',x:e.x,y:e.y,radius:60,color:0xb0dbf4});
-        for(const n of this.nearby(e.x,e.y,60))this.hit(n,16*this.power,'comet',true);
+        for(const n of this.nearby(e.x,e.y,60))this.hit(n,16*this.power,'comet',true,undefined,true);
       }
     }
   }
@@ -141,26 +150,26 @@ export class Combat {
   private cast(weapon:WeaponId,level:number) {
     const target=this.nearest(this.player.x,this.player.y,weapon==='comet'?480:weapon==='ember'?350:240);if(!target)return;
     this.effect({kind:'cast',weapon,x:this.player.x,y:this.player.y,tx:target.x,ty:target.y});
-    const scale=(1+(level-1)*0.34)*this.power;
+    const scale=SPELL_DAMAGE[level]*this.power;
     if(weapon==='spark'){
       let current=target;let previous:{x:number;y:number}=this.player;const visited=new Set<number>();
       for(let i=0;i<3+Math.floor(level/2);i++){
-        visited.add(current.id);this.hit(current,(i===0?27:17)*scale,'spark',false,Math.atan2(current.y-previous.y,current.x-previous.x));this.effect({kind:'chain',x:previous.x,y:previous.y,tx:current.x,ty:current.y,color:0x9cebe0});
+        visited.add(current.id);this.hit(current,(i===0?18:15)*scale,'spark',false,Math.atan2(current.y-previous.y,current.x-previous.x),i>0);this.effect({kind:'chain',x:previous.x,y:previous.y,tx:current.x,ty:current.y,color:0x9cebe0});
         previous=current;const next=this.nearby(current.x,current.y,145*this.reach).filter(e=>!visited.has(e.id)).sort((a,b)=>distance2(a,current)-distance2(b,current))[0];if(!next){
           // Unused jumps converge on a surviving solitary target at reduced strength.
           const unused=2+Math.floor(level/2)-i;
-          if(unused>0 && current.hp>0)this.hit(current,unused*3*scale,'spark',true);
+          if(i===0 && unused>0 && current.hp>0)this.hit(current,unused*1.5*scale,'spark',true);
           break;
         }current=next;
       }
     }else if(weapon==='spore'){
       this.zones.push({id:this.nextId(),x:target.x,y:target.y,radius:(75+level*6)*this.reach,life:3.8*(this.character.id==='fern'?1.25:1),tick:0,damage:8*scale,kind:'spore',timer:0});
     }else if(weapon==='ember'){
-      this.fire('ember',target,30*scale*(this.character.id==='ash'?1.15:1),390,1);
+      this.fire('ember',target,19*scale*(this.character.id==='ash'?1.15:1),390,1);
       if(level>=4)this.fire('ember',target,18*scale,390,1,0.22);
     }else if(weapon==='frost'){
       const radius=(140+level*12)*this.reach;
-      for(const e of this.nearby(this.player.x,this.player.y,radius)){if(e.slow>0){e.frozen=e.kind==='boss'?.12:.45;}this.hit(e,20*scale,'frost');e.slow=e.kind==='boss'?1.3:2.8;}
+      for(const e of this.nearby(this.player.x,this.player.y,radius)){if(e.slow>0){e.frozen=e.kind==='boss'?.12:.45;}this.hit(e,23*scale,'frost');e.slow=e.kind==='boss'?1.3:2.8;}
       this.effect({kind:'frost',x:this.player.x,y:this.player.y,radius,color:0xb4d6ef});
     }else if(weapon==='comet'){
       this.fire('comet',target,40*scale,560,4+level);
@@ -222,8 +231,8 @@ export class Combat {
     if(this.seconds>=480){this.ended=true;return;}
     if(this.seconds>=360&&!this.bossSpawned){this.bossSpawned=true;this.spawn('boss');this.effect({kind:'level',x:p.x,y:p.y,text:'古树守卫苏醒了'});}
     this.spawnClock-=dt;this.eliteClock-=dt;
-    if(this.spawnClock<=0){this.spawnClock=Math.max(0.22,0.85-this.seconds/580)*(this.bossSpawned?1.8:1);const pool:EnemyKind[]=this.seconds<40?['slime','moth']:this.seconds<100?['slime','moth','twig']:['slime','moth','twig','spitter','beetle'];this.spawn(this.rng.pick(pool));}
-    if(this.eliteClock<=0&&this.seconds<350){this.spawn(this.rng.next()>.5?'brute':'crystal');this.eliteClock=55;}
+    if(this.spawnClock<=0){this.spawnClock=Math.max(0.22,0.85-this.seconds/580)*(this.bossSpawned?1.8:1)/rampDifficulty(this.rules.waveRate,this.seconds);const pool:EnemyKind[]=this.seconds<40?['slime','moth']:this.seconds<100?['slime','moth','twig']:['slime','moth','twig','spitter','beetle'];this.spawn(this.rng.pick(pool));}
+    if(this.eliteClock<=0&&this.seconds<350){this.spawn(this.rng.next()>.5?'brute':'crystal');this.eliteClock=55/rampDifficulty(55/this.rules.eliteInterval,this.seconds);}
     for(const e of this.enemies){
       if(e.hp<=0)continue;e.frozen=Math.max(0,e.frozen-dt);if(e.frozen===0)e.clock-=dt;e.slow=Math.max(0,e.slow-dt);e.proc=Math.max(0,e.proc-dt);e.flash=Math.max(0,e.flash-dt);e.spore=Math.max(0,e.spore-dt);
       if(e.burn>0){e.burn-=dt;e.burnClock-=dt;if(e.burnClock<=0){e.burnClock=0.5;this.hit(e,5*this.power*(1+(this.build.ember??1)*0.2),'ember',true);}}
@@ -247,12 +256,12 @@ export class Combat {
         this.hurt(e.attack,e.x,e.y);
       }
       if(e.clock<=0){
-        e.clock=e.kind==='boss'?(e.phase?2.8:4):e.kind==='twig'?3.5:3;
+        e.clock=e.kind==='boss'?(e.phase?2.8:4)*this.rules.bossInterval:e.kind==='twig'?3.5:3;
         if(e.kind==='spitter'||e.kind==='crystal'||e.kind==='boss')e.attackPose=ATTACK_POSE_TIME;
         if(e.kind==='spitter'||e.kind==='crystal')this.enemyShot(e,Math.atan2(dy,dx));
         if(e.kind==='boss'){
           const count=e.phase?12:8;for(let i=0;i<count;i++)this.enemyShot(e,i/count*Math.PI*2+this.seconds*.16,120);
-          this.zones.push({id:this.nextId(),x:p.x,y:p.y,radius:e.phase?105:85,life:1.3,tick:0,damage:25,kind:'warning',timer:0});
+          this.zones.push({id:this.nextId(),x:p.x,y:p.y,radius:e.phase?105:85,life:1.3,tick:0,damage:Math.round(25*this.rules.damage),kind:'warning',timer:0});
         }
       }
     }
@@ -263,7 +272,7 @@ export class Combat {
       if(this.weaponClocks[weapon]!<=0){this.weaponClocks[weapon]=this.attackInterval(weapon);this.cast(weapon,value!);}
     }
     this.leafClock-=dt;
-    if(this.build.leaf&&this.leafClock<=0){this.leafClock=this.attackInterval('leaf');const r=(80+this.build.leaf*7)*this.reach;for(const e of this.nearby(p.x,p.y,r))this.hit(e,10*(1+this.build.leaf*.4)*this.power,'leaf');}
+    if(this.build.leaf&&this.leafClock<=0){this.leafClock=this.attackInterval('leaf');const r=(80+this.build.leaf*7)*this.reach;for(const e of this.nearby(p.x,p.y,r))this.hit(e,14*SPELL_DAMAGE[this.build.leaf]*this.power,'leaf');}
     for(const z of this.zones){z.life-=dt;z.timer+=dt;z.tick-=dt;
       if(z.kind==='warning'){if(z.life<=0){if(distance2(p,z)<(z.radius+12)**2)this.hurt(z.damage,z.x,z.y);this.effect({kind:'burst',x:z.x,y:z.y,radius:z.radius,color:0xe77e70});}continue;}
       if(z.tick<=0){z.tick=0.5;for(const e of this.nearby(z.x,z.y,z.radius)){this.hit(e,z.damage,z.kind,true);if(z.kind==='spore')e.spore=2;else e.burn=2;}}
@@ -276,8 +285,15 @@ export class Combat {
         if(e.hp<=0||shot.hit.has(e.id))continue;
         shot.hit.add(e.id);this.hit(e,shot.damage,shot.weapon,false,Math.atan2(shot.vy,shot.vx));shot.pierce--;
         if(shot.weapon==='ember'){
+          if(e.burn<=0)e.burnClock=.5;
           e.burn=3;const radius=(55+(this.build.ember??1)*5)*this.reach;
-          for(const n of this.nearby(e.x,e.y,radius))if(n.id!==e.id){this.hit(n,shot.damage*.65,'ember',true);n.burn=3;}
+          for(const n of this.nearby(e.x,e.y,radius)){
+            if(n.id===e.id)continue;
+            const distance=Math.min(1,Math.sqrt(distance2(e,n))/radius);
+            this.hit(n,shot.damage*(.60-.30*distance),'ember',true,undefined,true);
+            if(n.burn<=0)n.burnClock=.5;
+            n.burn=Math.max(n.burn,1.5);
+          }
           this.effect({kind:'burst',x:e.x,y:e.y,radius,color:0xf4b172});
         }
         if(shot.pierce<=0){shot.life=0;break;}
