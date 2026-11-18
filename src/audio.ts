@@ -15,6 +15,9 @@ export class AudioDirector {
     osc.connect(gain);gain.connect(this.master);osc.start(now);osc.stop(now+duration+.02);osc.onended=()=>{osc.disconnect();gain.disconnect()};
   }
   private tick(){if(this.paused||this.music<=0)return;const melody=this.combat?[0,7,12,10,7,3,5,7,0,7,15,12,10,7,5,3]:[0,7,12,7,3,10,15,10,5,12,17,12,3,10,7,3];const note=melody[this.step%melody.length];this.tone(174.61*2**(note/12),.85,this.music*.09,'sine');if(this.step%4===0)this.tone(87.3,.95,this.music*.08,'triangle');this.step++;}
+  gather(){
+    if(this.sound>0)this.tone(810,.075,this.sound*.06,'sine',1190);
+  }
   impact(heavy:boolean){
     const now=performance.now();
     if(now-this.lastHit<(heavy?70:110))return;

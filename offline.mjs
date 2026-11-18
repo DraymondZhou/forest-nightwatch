@@ -10,10 +10,8 @@ const cssTag = html.match(/<link[^>]+href="([^"]+\.css)"[^>]*>/);
 if (!jsTag || !cssTag) throw Error('Expected one Vite entry and stylesheet');
 const inline = name => fs.readFileSync(path.join(dist,'art',name)).toString('base64');
 const mime = name => name.endsWith('webp') ? 'image/webp' : 'image/png';
-const images = Object.fromEntries(fs.readdirSync(path.join(dist,'art'))
-  .filter(n=>/^woodcut-(?:ground\.webp|props\.png|enemies\.png)$/.test(n)||/^hero-(?:head|body|left-(?:leg|upper|forearm)|right-(?:leg|upper|forearm))\.png$/.test(n))
-  .map(n=>[n,[mime(n),inline(n)]]));
-if (Object.keys(images).length!==11) throw Error('Incomplete runtime atlas set');
+const runtimeArt = ['woodcut-ground.webp','woodcut-props.png','woodcut-enemies.png','pickups.png','traveler.png'];
+const images = Object.fromEntries(runtimeArt.map(name=>[name,[mime(name),inline(name)]]));
 const css = read(cssTag[1]).replace(/(?:\/|\.\/)?art\/title-forest\.webp/g,()=> 'data:image/webp;base64,'+inline('title-forest.webp'));
 const setup = 'window.forestArt={};for(const [key,[type,b64]] of Object.entries('+JSON.stringify(images)+')){const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));window.forestArt[key]=URL.createObjectURL(new Blob([bytes],{type}));}';
 const code = read(jsTag[1]).replace(/<\/script/gi,'<\\/script');

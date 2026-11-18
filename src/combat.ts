@@ -3,11 +3,11 @@ import { Random, xpNeeded, activeSynergies, type Build, type RunSummary } from '
 
 
 export type EnemyKind='slime'|'moth'|'twig'|'spitter'|'beetle'|'brute'|'crystal'|'boss';
-export interface Enemy {id:number;kind:EnemyKind;x:number;y:number;hp:number;maxHp:number;radius:number;speed:number;attack:number;phase:number;clock:number;slow:number;burn:number;burnClock:number;spore:number;proc:number;flash:number}
+export interface Enemy {id:number;kind:EnemyKind;x:number;y:number;hp:number;maxHp:number;radius:number;speed:number;attack:number;phase:number;clock:number;slow:number;burn:number;burnClock:number;spore:number;proc:number;flash:number;hitAngle:number}
 export interface Shot {id:number;x:number;y:number;vx:number;vy:number;life:number;radius:number;damage:number;weapon:WeaponId|'enemy';pierce:number;hit:Set<number>}
 export interface Zone {id:number;x:number;y:number;radius:number;life:number;tick:number;damage:number;kind:'spore'|'ember'|'warning';timer:number}
-export interface Drop {id:number;x:number;y:number;value:number;kind:'xp'|'heal'}
-export interface Effect {kind:'strike'|'cast'|'hit'|'chain'|'burst'|'frost'|'heal'|'level'|'synergy';x:number;y:number;tx?:number;ty?:number;radius?:number;color?:number;text?:string}
+export interface Drop {id:number;x:number;y:number;value:number;born:number;kind:'xp'|'heal'}
+export interface Effect {kind:'defeat'|'gather'|'strike'|'cast'|'hit'|'chain'|'burst'|'frost'|'heal'|'level'|'synergy';x:number;y:number;enemyKind?:EnemyKind;tx?:number;ty?:number;radius?:number;color?:number;text?:string}
 export interface Controls {x:number;y:number}
 const distance2=(a:{x:number;y:number},b:{x:number;y:number})=>(a.x-b.x)**2+(a.y-b.y)**2;
 const ENEMY_STATS:Record<EnemyKind,[number,number,number,number]>={slime:[22,48,17,9],moth:[16,86,13,7],twig:[30,105,15,10],spitter:[36,40,19,9],beetle:[74,42,24,13],brute:[440,52,38,18],crystal:[300,65,30,16],boss:[6400,34,62,21]};
@@ -19,11 +19,16 @@ export class Combat {
   seconds=0;level=1;xp=0;kills=0;pendingLevels=0;ended=false;won=false;bossSpawned=false;synergySeen=false;
   damageByWeapon:Partial<Record<WeaponId,number>>={};
   private id=1;private spawnClock=0;private eliteClock=50;private weaponClocks:Partial<Record<WeaponId,number>>={};
-  private enemyGrid=new Map<string,Enemy[]>();private leafClock=0;private ticks=0;
+  private gridHeads = new Int16Array(32 * 32);
+  private nextEnemy: number[] = [];
+  private shotCandidates: Enemy[] = [];
+  private leafClock=0;private ticks=0;
   constructor(characterId:CharacterId,seed:number) {
     this.character=CHARACTERS.find(c=>c.id===characterId)!;this.seed=seed;this.rng=new Random(seed);
+    this.gridHeads.fill(-1);
     this.player.hp=this.player.maxHp=this.character.hp;this.build[this.character.weapon]=1;
   }
+  get pickupRadius(){return (98+(this.build.reach??0)*12)*(this.character.id==='hazel'?1.2:1);}
   get boss() {return this.enemies.find(e=>e.kind==='boss');}
   get power() {return 1+(this.build.power??0)*0.12;}
   get reach() {return 1+(this.build.reach??0)*0.1;}
@@ -36,14 +41,31 @@ export class Combat {
     if(id==='vigor'){this.player.maxHp+=20;this.player.hp=Math.min(this.player.maxHp,this.player.hp+20);}
     this.synergySeen ||= activeSynergies(this.build).length>0;
   }
+  // Buckets wrap, world positions do not. The exact circle test rejects distant aliases.
   private rebuildGrid() {
-    this.enemyGrid.clear(); for(const enemy of this.enemies){if(enemy.hp<=0)continue;const key=`${Math.floor(enemy.x/120)},${Math.floor(enemy.y/120)}`;const cell=this.enemyGrid.get(key);if(cell)cell.push(enemy);else this.enemyGrid.set(key,[enemy]);}
+    this.gridHeads.fill(-1);
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const e = this.enemies[i];
+      if (e.hp <= 0) continue;
+      const cell = ((Math.floor(e.y / 120) & 31) << 5) | (Math.floor(e.x / 120) & 31);
+      this.nextEnemy[i] = this.gridHeads[cell];
+      this.gridHeads[cell] = i;
+    }
   }
-  nearby(x:number,y:number,r:number):Enemy[] {
-    const found:Enemy[]=[];
-    for(let gx=Math.floor((x-r)/120);gx<=Math.floor((x+r)/120);gx++)for(let gy=Math.floor((y-r)/120);gy<=Math.floor((y+r)/120);gy++){
-      for(const e of this.enemyGrid.get(`${gx},${gy}`)??[])if(e.hp>0&&(e.x-x)**2+(e.y-y)**2<=(r+e.radius)**2)found.push(e);
-    }return found;
+  private nearby(x: number, y: number, radius: number, out: Enemy[] = [], margin = 0): Enemy[] {
+    out.length = 0;
+    const extent = radius + margin;
+    const xmax = Math.floor((x + extent) / 120), ymax = Math.floor((y + extent) / 120);
+    for (let gx = Math.floor((x - extent) / 120); gx <= xmax; gx++) {
+      for (let gy = Math.floor((y - extent) / 120); gy <= ymax; gy++) {
+        const cell = ((gy & 31) << 5) | (gx & 31);
+        for (let i = this.gridHeads[cell]; i >= 0; i = this.nextEnemy[i]) {
+          const e = this.enemies[i];
+          if (e.hp > 0 && (e.x-x)**2 + (e.y-y)**2 <= (radius+e.radius)**2) out.push(e);
+        }
+      }
+    }
+    return out;
   }
   private nearest(x=this.player.x,y=this.player.y,max=270):Enemy|undefined {
     let target:Enemy|undefined;let best=max*max; for(const e of this.enemies){if(e.hp<=0)continue;const d=(e.x-x)**2+(e.y-y)**2;if(e.kind==='boss'&&d<max*max*.75)return e;if(d<best){best=d;target=e;}}return target;
@@ -52,7 +74,7 @@ export class Combat {
     if(this.enemies.length>=150&&kind!=='boss')return;
     const angle=this.rng.between(0,Math.PI*2);const radius=this.seconds<15?this.rng.between(120,220):this.rng.between(330,500);
     const [baseHp,speed,size,attack]=ENEMY_STATS[kind];const scale=kind==='boss'?1:1+this.seconds/165;
-    const enemy:Enemy={id:this.nextId(),kind,x:x??this.player.x+Math.cos(angle)*radius,y:y??this.player.y+Math.sin(angle)*radius,hp:baseHp*scale,maxHp:baseHp*scale,radius:size,speed,attack,phase:0,clock:this.rng.between(1,3),slow:0,burn:0,burnClock:0,spore:0,proc:0,flash:0};
+    const enemy:Enemy={id:this.nextId(),kind,x:x??this.player.x+Math.cos(angle)*radius,y:y??this.player.y+Math.sin(angle)*radius,hp:baseHp*scale,maxHp:baseHp*scale,radius:size,speed,attack,phase:0,clock:this.rng.between(1,3),slow:0,burn:0,burnClock:0,spore:0,proc:0,flash:0,hitAngle:0};
     this.enemies.push(enemy);return enemy;
   }
   private effect(effect:Effect){if(this.effects.length<100)this.effects.push(effect);}
@@ -62,12 +84,15 @@ export class Combat {
     this.effect({kind:'hit',x:this.player.x,y:this.player.y,color:0xf19a8a,text:`−${Math.round(amount)}`});
     if(this.player.hp<=0)this.ended=true;
   }
-  private hit(e:Enemy,damage:number,weapon:WeaponId,secondary=false) {
+  private hit(e:Enemy,damage:number,weapon:WeaponId,secondary=false,fromAngle?:number) {
     if(e.hp<=0)return;
     const applied=Math.min(e.hp,damage);e.hp-=damage;e.flash=0.08;
     this.damageByWeapon[weapon]=(this.damageByWeapon[weapon]??0)+applied;
+    const angle = fromAngle ?? Math.atan2(e.y-this.player.y,e.x-this.player.x);
+    e.hitAngle = angle;
+    if (e.hp <= 0) this.effect({kind:'defeat', x:e.x, y:e.y, tx:angle, radius:e.radius, enemyKind:e.kind});
     if (!secondary && weapon !== 'spore') {
-      this.effect({kind:'strike',x:e.x,y:e.y,tx:Math.atan2(e.y-this.player.y,e.x-this.player.x),
+      this.effect({kind:'strike',x:e.x,y:e.y,tx:angle,
         radius:e.hp<=0?24:14,color:weapon==='ember'?0xffbb76:weapon==='spark'?0xb7e4d4:0xe5cb93});
     }
     if(this.ticks%4===0||damage>35)this.effect({kind:'hit',x:e.x,y:e.y,text:String(Math.round(damage)),color:0xf4db9c});
@@ -97,7 +122,7 @@ export class Combat {
     if(weapon==='spark'){
       let current=target;let previous:{x:number;y:number}=this.player;const visited=new Set<number>();
       for(let i=0;i<3+Math.floor(level/2);i++){
-        visited.add(current.id);this.hit(current,(i===0?27:17)*scale,'spark');this.effect({kind:'chain',x:previous.x,y:previous.y,tx:current.x,ty:current.y,color:0x9cebe0});
+        visited.add(current.id);this.hit(current,(i===0?27:17)*scale,'spark',false,Math.atan2(current.y-previous.y,current.x-previous.x));this.effect({kind:'chain',x:previous.x,y:previous.y,tx:current.x,ty:current.y,color:0x9cebe0});
         previous=current;const next=this.nearby(current.x,current.y,145*this.reach).filter(e=>!visited.has(e.id)).sort((a,b)=>distance2(a,current)-distance2(b,current))[0];if(!next)break;current=next;
       }
     }else if(weapon==='spore'){
@@ -117,7 +142,7 @@ export class Combat {
   private enemyShot(e:Enemy,angle:number,speed=145){if(this.shots.length>=280)return;this.shots.push({id:this.nextId(),x:e.x,y:e.y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:5,radius:8,damage:e.attack,weapon:'enemy',pierce:1,hit:new Set()});}
   step(dt:number,control:Controls) {
     if(this.ended||this.pendingLevels>0)return;
-    dt=Math.min(dt,0.05);this.seconds+=dt;this.ticks++;this.effects=[];
+    dt=Math.min(dt,0.05);this.seconds+=dt;this.ticks++;this.effects.length=0;
     const p=this.player;p.invincible=Math.max(0,p.invincible-dt);
     const length=Math.hypot(control.x,control.y);p.moving=length>0.05;
     if(p.moving){const norm=Math.max(1,length);const speed=this.character.speed*(1+(this.build.stride??0)*0.08);p.x+=control.x/norm*speed*dt;p.y+=control.y/norm*speed*dt;p.angle=Math.atan2(control.y,control.x);}
@@ -166,9 +191,9 @@ export class Combat {
     for(const shot of this.shots){
       shot.life-=dt;shot.x+=shot.vx*dt;shot.y+=shot.vy*dt;
       if(shot.weapon==='enemy'){if(distance2(shot,p)<(shot.radius+13)**2){this.hurt(shot.damage);shot.life=0;}continue;}
-      for(const e of this.nearby(shot.x,shot.y,shot.radius+62)){
-        if(shot.hit.has(e.id)||distance2(e,shot)>(e.radius+shot.radius)**2)continue;
-        shot.hit.add(e.id);this.hit(e,shot.damage,shot.weapon);shot.pierce--;
+      for(const e of this.nearby(shot.x,shot.y,shot.radius,this.shotCandidates,62)){
+        if(e.hp<=0||shot.hit.has(e.id))continue;
+        shot.hit.add(e.id);this.hit(e,shot.damage,shot.weapon,false,Math.atan2(shot.vy,shot.vx));shot.pierce--;
         if(shot.weapon==='ember'){
           e.burn=3;const radius=(55+(this.build.ember??1)*5)*this.reach;
           for(const n of this.nearby(e.x,e.y,radius))if(n.id!==e.id){this.hit(n,shot.damage*.65,'ember',true);n.burn=3;}
@@ -181,18 +206,26 @@ export class Combat {
     for(const e of this.enemies)if(e.hp<=0){
       this.kills++;const elite=['boss','brute','crystal'].includes(e.kind);const value=elite?24:3;
       // Merge overflow XP rather than dropping rewards when a player circles the arena.
-      if(this.drops.length<300)this.drops.push({id:this.nextId(),x:e.x,y:e.y,value,kind:'xp'});else {const existing=this.drops.find(d=>d.kind==='xp');if(existing)existing.value+=value;}
-      if(this.drops.length<320&&(elite||this.rng.next()<0.025))this.drops.push({id:this.nextId(),x:e.x+12,y:e.y,value:elite?22:12,kind:'heal'});
+      if(this.drops.length<300)this.drops.push({id:this.nextId(),x:e.x,y:e.y,born:this.seconds,value,kind:'xp'});else {const existing=this.drops.find(d=>d.kind==='xp');if(existing)existing.value+=value;}
+      if(this.drops.length<320&&(elite||this.rng.next()<0.025))this.drops.push({id:this.nextId(),x:e.x+12,y:e.y,born:this.seconds,value:elite?22:12,kind:'heal'});
       if(e.kind==='boss'){this.won=true;this.ended=true;}
     }
     this.enemies=this.enemies.filter(e=>e.hp>0 && (e.kind==='boss' || distance2(e,p)<1400**2));
-    const pickup=(98+(this.build.reach??0)*12)*(this.character.id==='hazel'?1.2:1);
+    const pickup = this.pickupRadius;
+    let gathered = false;
     this.drops=this.drops.filter(d=>{
-      const dist=Math.hypot(d.x-p.x,d.y-p.y);if(dist>1600)return false;if(dist<pickup){const step=320*dt;d.x+=(p.x-d.x)/Math.max(1,dist)*Math.min(step,dist);d.y+=(p.y-d.y)/Math.max(1,dist)*Math.min(step,dist);}
+      const squared = distance2(d,p);
+      if(squared>1600**2)return false;
+      if(squared>=pickup*pickup)return true;
+      const dist=Math.sqrt(squared);
+      const travel=Math.min(320*dt,dist)/Math.max(1,dist);
+      d.x+=(p.x-d.x)*travel;d.y+=(p.y-d.y)*travel;
       if(dist>22)return true;
       if(d.kind==='heal'){p.hp=Math.min(p.maxHp,p.hp+d.value);this.effect({kind:'heal',x:p.x,y:p.y,text:`+${d.value}`});}
-      else this.xp+=d.value*(1+(this.build.fortune??0)*.1);return false;
+      else {this.xp+=d.value*(1+(this.build.fortune??0)*.1);gathered=true;}
+      return false;
     });
+    if(gathered)this.effect({kind:'gather',x:p.x,y:p.y+6,color:0xf4cf78,radius:15});
     while(this.xp>=xpNeeded(this.level)){this.xp-=xpNeeded(this.level);this.level++;this.pendingLevels++;p.hp=Math.min(p.maxHp,p.hp+2+(this.build.fortune??0)*2);}
   }
   resolveLevel(id?:UpgradeId){if(this.pendingLevels<=0)return;if(id)this.addUpgrade(id);else this.player.hp=Math.min(this.player.maxHp,this.player.hp+20);this.pendingLevels--;}
