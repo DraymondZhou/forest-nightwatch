@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
-import {Combat,WORLD,type EnemyKind,type Effect} from './combat';
+import {Combat,type EnemyKind,type Effect} from './combat';
 
+import { Woodland } from './terrain';
+import { art } from './art';
 import {WitchRig} from './rig';
 import type {AudioDirector} from './audio';
 
@@ -10,25 +12,27 @@ type VisualEffect=Effect&{life:number;max:number};
 export interface SceneHooks {tick:(sim:Combat,fps:number,slow:number)=>void;upgrade:()=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean}
 export class ForestScene extends Phaser.Scene {
   sim?:Combat;running=false;private hooks:SceneHooks;
-  private worldInk!:Phaser.GameObjects.Graphics;private fxInk!:Phaser.GameObjects.Graphics;
+  private woods!:Woodland;private worldInk!:Phaser.GameObjects.Graphics;private fxInk!:Phaser.GameObjects.Graphics;
   private rig?:WitchRig;private sprites=new Map<number,Phaser.GameObjects.Image>();private spritePool:Phaser.GameObjects.Image[]=[];
   private texts:Phaser.GameObjects.Text[]=[];private textCursor=0;private effects:VisualEffect[]=[];
   private keys?:Record<string,Phaser.Input.Keyboard.Key>;private accumulator=0;private uiClock=0;private slowFrames=0;private frames=0;private frameTime=0;private lastPaint=0;
   private stick?:{id:number;x:number;y:number};private movement={x:0,y:0};private stickInk!:Phaser.GameObjects.Graphics;
   constructor(hooks:SceneHooks){super('forest');this.hooks=hooks;}
   preload(){
-    this.load.image('arena','art/arena.webp');this.load.image('enemies','art/enemies-atlas-clean.png');
-    for(const name of ['head','body','left-upper','left-forearm','right-upper','right-forearm','left-leg','right-leg'])this.load.image(`hero-${name}`,`art/hero-${name}.png`);
+    this.load.image('ground',art('woodcut-ground.webp'));this.load.image('props',art('woodcut-props.png'));this.load.image('enemies',art('woodcut-enemies.png'));
+    for(const name of ['head','body','left-upper','left-forearm','right-upper','right-forearm','left-leg','right-leg'])this.load.image(`hero-${name}`,art(`hero-${name}.png`));
     this.load.on('loaderror',()=>this.hooks.error('部分美术资源加载失败，请检查网络后重新加载。'));
   }
   create(){
     const texture=this.textures.get('enemies'),source=texture.getSourceImage();
     const w=source.width,h=source.height;
     for(let i=0;i<8;i++){const x=Math.round((i%4)*w/4),y=Math.round(Math.floor(i/4)*h/2);texture.add(i,0,x,y,Math.round((i%4+1)*w/4)-x,Math.round((Math.floor(i/4)+1)*h/2)-y);}
-    this.add.image(0,0,'arena').setOrigin(0).setDisplaySize(WORLD.width,WORLD.height).setDepth(-20);
+    const props=this.textures.get('props'), sheet=props.getSourceImage();
+    for(let i=0;i<4;i++)props.add(i,0,i*sheet.width/4,0,sheet.width/4,sheet.height);
+    this.woods=new Woodland(this);
     this.worldInk=this.add.graphics().setDepth(-1);this.fxInk=this.add.graphics().setDepth(5000);this.stickInk=this.add.graphics().setScrollFactor(0).setDepth(10000);
     for(let i=0;i<28;i++)this.texts.push(this.add.text(0,0,'',{fontFamily:'Georgia, serif',fontSize:'17px',color:'#f4dfb4',stroke:'#15332d',strokeThickness:3}).setDepth(6000).setVisible(false));
-    this.cameras.main.setBounds(0,0,WORLD.width,WORLD.height);
+
     this.keys=this.input.keyboard?.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT') as Record<string,Phaser.Input.Keyboard.Key>;
     this.input.keyboard?.on('keydown-ESC',()=>{if(this.running)this.hooks.pause()});
     this.input.on('pointerdown',(p:Phaser.Input.Pointer)=>{if(!this.running||p.x>this.scale.width*.48)return;this.stick={id:p.id,x:p.x,y:p.y};});
@@ -42,6 +46,7 @@ export class ForestScene extends Phaser.Scene {
     this.sim=sim;this.accumulator=0;this.uiClock=0;this.slowFrames=0;this.frames=0;this.frameTime=0;this.lastPaint=0;this.effects=[];
     this.sprites.forEach(s=>{s.setVisible(false);this.spritePool.push(s)});this.sprites.clear();this.texts.forEach(t=>t.setVisible(false));
     this.rig?.destroy();this.rig=new WitchRig(this,sim.character.id==='hazel'?0xffffff:sim.character.id==='fern'?0x9ed7ba:0xc8b5ed);this.running=true;
+    this.rig.root.setPosition(sim.player.x,sim.player.y);this.cameras.main.centerOn(sim.player.x,sim.player.y);
     this.cameras.main.startFollow(this.rig.root,true,.12,.12);this.cameras.main.setZoom(1);
     this.hooks.tick(sim,60,0);
   }
@@ -63,17 +68,19 @@ export class ForestScene extends Phaser.Scene {
       }
       this.rig.update(dt,this.sim.player.moving,this.sim.player.angle,this.sim.player.invincible>0,this.sim.seconds);
     }
-    this.rig.root.setPosition(this.sim.player.x,this.sim.player.y).setDepth(this.sim.player.y);
-    this.drawWorld();this.drawEffects(this.running?dt:0);this.drawStick();
+    this.rig.root.setPosition(this.sim.player.x,this.sim.player.y).setDepth(1000);
+    this.woods.follow(this.sim.player.x,this.sim.player.y,this.sim.seed);this.drawWorld();this.drawEffects(this.running?dt:0);this.drawStick();
     this.uiClock+=dt;if(this.uiClock>.12){this.uiClock=0;this.hooks.tick(this.sim,this.frameTime?1000*this.frames/this.frameTime:0,this.slowFrames);}
   }
   private captureEffects(){
     for(const effect of this.sim!.effects){
+      if(effect.kind==='cast'){this.rig?.cast(effect.tx!-effect.x);continue;}
+      if(effect.kind==='strike')this.hooks.audio.impact((effect.radius??0)>18);
       if(effect.kind==='hit'){
         if(!this.hooks.lowQuality()){const t=this.texts[this.textCursor++%this.texts.length];this.tweens.killTweensOf(t);t.setPosition(effect.x,effect.y-24).setText(effect.text??'').setVisible(true).setAlpha(1).setColor(effect.color===0xf19a8a?'#f8a799':'#f0ddb6');this.tweens.add({targets:t,y:t.y-25,alpha:0,duration:500,onComplete:()=>t.setVisible(false)});}
-        this.hooks.audio.play(effect.color===0xf19a8a?'hurt':'hit');
+        if(effect.color===0xf19a8a)this.hooks.audio.play('hurt');
       }else if(effect.kind==='heal')this.hooks.audio.play('heal');
-      if(effect.kind!=='hit'&&this.effects.length<100){const life=effect.kind==='chain'?.18:.5;this.effects.push({...effect,life,max:life});}
+      if(effect.kind!=='hit'&&this.effects.length<100){const life=effect.kind==='strike'?.14:effect.kind==='chain'?.18:.5;this.effects.push({...effect,life,max:life});}
     }
   }
   private drawWorld(){
@@ -87,9 +94,9 @@ export class ForestScene extends Phaser.Scene {
     for(const enemy of sim.enemies){
       living.add(enemy.id);let sprite=this.sprites.get(enemy.id);
       if(!sprite){sprite=this.spritePool.pop()??this.add.image(0,0,'enemies');sprite.setTexture('enemies',FRAME[enemy.kind]).setVisible(true);this.sprites.set(enemy.id,sprite);}
-      const size=enemy.radius*3.5;const bob=Math.sin(sim.seconds*(enemy.kind==='moth'?12:7)+enemy.id)*2;
-      sprite.setPosition(enemy.x,enemy.y-10+bob).setDisplaySize(size,size).setDepth(enemy.y).setFlipX(enemy.x>sim.player.x);
-      if(enemy.flash>0)sprite.setTintFill(0xffe8bf);else if(enemy.slow>0)sprite.setTint(0xa9d4f0);else sprite.clearTint();
+      const recoil=enemy.flash/.08;const angle=Math.atan2(enemy.y-sim.player.y,enemy.x-sim.player.x);const weight=enemy.kind==='boss'?2:7;const size=enemy.radius*3.5;const bob=Math.sin(sim.seconds*(enemy.kind==='moth'?12:7)+enemy.id)*2;
+      sprite.setPosition(enemy.x+Math.cos(angle)*recoil*weight,enemy.y-10+bob+Math.sin(angle)*recoil*weight).setDisplaySize(size*(1+recoil*.09),size*(1-recoil*.08)).setDepth(1000+(enemy.y-sim.player.y)).setFlipX(enemy.x>sim.player.x);
+      if(enemy.flash>.055)sprite.setTintFill(0xdcd6b0);else if(enemy.slow>0)sprite.setTint(0xa9d4f0);else sprite.clearTint();
       g.fillStyle(0x102e29,.35);g.fillEllipse(enemy.x,enemy.y+enemy.radius*.6,enemy.radius*1.7,enemy.radius*.65);
       if(enemy.kind==='boss'||enemy.kind==='brute'||enemy.kind==='crystal'){g.lineStyle(2,0xe59c7d,.65);g.strokeCircle(enemy.x,enemy.y,enemy.radius+5);}
       if(enemy.spore>0){g.fillStyle(0xd4e59c,.8);g.fillCircle(enemy.x+10,enemy.y-18,3);}
@@ -99,6 +106,13 @@ export class ForestScene extends Phaser.Scene {
     const p=sim.player;g.fillStyle(0x0b2926,.5);g.fillEllipse(p.x,p.y+21,35,13);g.lineStyle(1,0xe9d295,.24);g.strokeCircle(p.x,p.y,25);
     if(sim.build.leaf){const count=2+sim.build.leaf,r=(80+sim.build.leaf*7)*sim.reach;g.lineStyle(1,0xe4d998,.16);g.strokeCircle(p.x,p.y,r);for(let i=0;i<count;i++){const a=sim.seconds*2.6+i/count*Math.PI*2;const x=p.x+Math.cos(a)*r,y=p.y+Math.sin(a)*r;g.fillStyle(0xe4d998);g.fillEllipse(x,y,16,7);}}
   }
-  private drawEffects(dt:number){const g=this.fxInk;g.clear();for(const e of this.effects){e.life-=dt;const alpha=e.life/e.max;g.lineStyle(e.kind==='chain'?3:2,e.color??0xc8dcac,alpha*.8);if(e.kind==='chain'){const mx=(e.x+e.tx!)/2+12;g.beginPath();g.moveTo(e.x,e.y);g.lineTo(mx,(e.y+e.ty!)/2-10);g.lineTo(mx-15,(e.y+e.ty!)/2+10);g.lineTo(e.tx!,e.ty!);g.strokePath();}else{g.strokeCircle(e.x,e.y,(e.radius??40)*(1-alpha*.65));}}this.effects=this.effects.filter(e=>e.life>0);}
+  private drawEffects(dt:number){const g=this.fxInk;g.clear();for(const e of this.effects){e.life-=dt;const alpha=e.life/e.max;g.lineStyle(e.kind==='chain'?3:2,e.color??0xc8dcac,alpha*.8);if(e.kind==='strike'){
+        const travel=(1-alpha)*(e.radius??16);
+        for(let i=-1;i<=1;i++){
+          const a=(e.tx??0)+i*.72;
+          const dx=Math.cos(a),dy=Math.sin(a);
+          g.lineBetween(e.x+dx*(4+travel),e.y+dy*(4+travel),e.x+dx*(8+travel+alpha*6),e.y+dy*(8+travel+alpha*6));
+        }
+      }else if(e.kind==='chain'){const mx=(e.x+e.tx!)/2+12;g.beginPath();g.moveTo(e.x,e.y);g.lineTo(mx,(e.y+e.ty!)/2-10);g.lineTo(mx-15,(e.y+e.ty!)/2+10);g.lineTo(e.tx!,e.ty!);g.strokePath();}else{g.strokeCircle(e.x,e.y,(e.radius??40)*(1-alpha*.65));}}this.effects=this.effects.filter(e=>e.life>0);}
   private drawStick(){const g=this.stickInk;g.clear();if(!this.running)return;const x=this.stick?.x??110,y=this.stick?.y??this.scale.height-115;g.lineStyle(2,0xd9e6d1,.2);g.strokeCircle(x,y,58);g.fillStyle(0xd9e6d1,this.stick?.12:.035);g.fillCircle(x,y,56);g.fillStyle(0xe3eadb,this.stick?.3:.09);g.fillCircle(x+this.movement.x*42,y+this.movement.y*42,23);}
 }

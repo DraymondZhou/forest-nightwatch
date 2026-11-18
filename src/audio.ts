@@ -15,6 +15,13 @@ export class AudioDirector {
     osc.connect(gain);gain.connect(this.master);osc.start(now);osc.stop(now+duration+.02);osc.onended=()=>{osc.disconnect();gain.disconnect()};
   }
   private tick(){if(this.paused||this.music<=0)return;const melody=this.combat?[0,7,12,10,7,3,5,7,0,7,15,12,10,7,5,3]:[0,7,12,7,3,10,15,10,5,12,17,12,3,10,7,3];const note=melody[this.step%melody.length];this.tone(174.61*2**(note/12),.85,this.music*.09,'sine');if(this.step%4===0)this.tone(87.3,.95,this.music*.08,'triangle');this.step++;}
+  impact(heavy:boolean){
+    const now=performance.now();
+    if(now-this.lastHit<(heavy?70:110))return;
+    this.lastHit=now;
+    this.tone(heavy?180:390,heavy?.105:.048,this.sound*(heavy?.16:.09),'triangle',heavy?58:130);
+    if(heavy)this.tone(800,.032,this.sound*.045,'square',240);
+  }
   play(kind:'hit'|'hurt'|'level'|'click'|'win'|'lose'|'heal'){
     if(kind==='hit'){if(performance.now()-this.lastHit<110)return;this.lastHit=performance.now();this.tone(340,.075,this.sound*.06,'triangle',140);}
     else if(kind==='hurt')this.tone(140,.18,this.sound*.17,'triangle',65);

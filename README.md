@@ -26,3 +26,11 @@ npm run build
 ## 资源与许可
 
 自制代码与游戏资源目前未授予开源使用许可。公开仓库用于交付与审阅，并不自动授权复制发行。第三方依赖沿用其各自许可；AI 辅助资源会记录生成方式与提示词。
+
+## 离线与手机试玩
+
+运行 npm run build 后执行 node offline.mjs。用 Edge 或 Chrome 双击打开生成的 Forest-Nightwatch.html 即可离线游玩。这个版本内嵌脚本、样式与运行素材。浏览器存档受打开方式和浏览器配置影响，换入口前可以在设置中导出。
+
+安装 Node.js 的 Windows 电脑可双击「手机同网试玩.cmd」。保持窗口开启，在同一 Wi-Fi 的手机 Safari 输入窗口列出的 WLAN 完整链接。每次启动会生成新地址，关闭窗口即停止服务。访客网络、设备间隔离及防火墙可能阻止同网访问。
+
+v1.1 使用无缝草地、按世界坐标布置的装饰和无边界战斗。图块实现参考 Phaser 官方 TileSprite 指南：https://phaser.io/oss/docs/phaser/concepts/gameobjects/tile-sprite

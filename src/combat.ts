@@ -1,13 +1,13 @@
 import { CHARACTERS, ABILITIES, type CharacterId, type UpgradeId, type WeaponId } from './content';
-import { Random, clamp, xpNeeded, activeSynergies, type Build, type RunSummary } from './model';
+import { Random, xpNeeded, activeSynergies, type Build, type RunSummary } from './model';
 
-export const WORLD={width:1800,height:1200};
+
 export type EnemyKind='slime'|'moth'|'twig'|'spitter'|'beetle'|'brute'|'crystal'|'boss';
 export interface Enemy {id:number;kind:EnemyKind;x:number;y:number;hp:number;maxHp:number;radius:number;speed:number;attack:number;phase:number;clock:number;slow:number;burn:number;burnClock:number;spore:number;proc:number;flash:number}
 export interface Shot {id:number;x:number;y:number;vx:number;vy:number;life:number;radius:number;damage:number;weapon:WeaponId|'enemy';pierce:number;hit:Set<number>}
 export interface Zone {id:number;x:number;y:number;radius:number;life:number;tick:number;damage:number;kind:'spore'|'ember'|'warning';timer:number}
 export interface Drop {id:number;x:number;y:number;value:number;kind:'xp'|'heal'}
-export interface Effect {kind:'hit'|'chain'|'burst'|'frost'|'heal'|'level'|'synergy';x:number;y:number;tx?:number;ty?:number;radius?:number;color?:number;text?:string}
+export interface Effect {kind:'strike'|'cast'|'hit'|'chain'|'burst'|'frost'|'heal'|'level'|'synergy';x:number;y:number;tx?:number;ty?:number;radius?:number;color?:number;text?:string}
 export interface Controls {x:number;y:number}
 const distance2=(a:{x:number;y:number},b:{x:number;y:number})=>(a.x-b.x)**2+(a.y-b.y)**2;
 const ENEMY_STATS:Record<EnemyKind,[number,number,number,number]>={slime:[22,48,17,9],moth:[16,86,13,7],twig:[30,105,15,10],spitter:[36,40,19,9],beetle:[74,42,24,13],brute:[440,52,38,18],crystal:[300,65,30,16],boss:[6400,34,62,21]};
@@ -52,7 +52,7 @@ export class Combat {
     if(this.enemies.length>=150&&kind!=='boss')return;
     const angle=this.rng.between(0,Math.PI*2);const radius=this.seconds<15?this.rng.between(120,220):this.rng.between(330,500);
     const [baseHp,speed,size,attack]=ENEMY_STATS[kind];const scale=kind==='boss'?1:1+this.seconds/165;
-    const enemy:Enemy={id:this.nextId(),kind,x:clamp(x??this.player.x+Math.cos(angle)*radius,50,WORLD.width-50),y:clamp(y??this.player.y+Math.sin(angle)*radius,50,WORLD.height-50),hp:baseHp*scale,maxHp:baseHp*scale,radius:size,speed,attack,phase:0,clock:this.rng.between(1,3),slow:0,burn:0,burnClock:0,spore:0,proc:0,flash:0};
+    const enemy:Enemy={id:this.nextId(),kind,x:x??this.player.x+Math.cos(angle)*radius,y:y??this.player.y+Math.sin(angle)*radius,hp:baseHp*scale,maxHp:baseHp*scale,radius:size,speed,attack,phase:0,clock:this.rng.between(1,3),slow:0,burn:0,burnClock:0,spore:0,proc:0,flash:0};
     this.enemies.push(enemy);return enemy;
   }
   private effect(effect:Effect){if(this.effects.length<100)this.effects.push(effect);}
@@ -66,6 +66,10 @@ export class Combat {
     if(e.hp<=0)return;
     const applied=Math.min(e.hp,damage);e.hp-=damage;e.flash=0.08;
     this.damageByWeapon[weapon]=(this.damageByWeapon[weapon]??0)+applied;
+    if (!secondary && weapon !== 'spore') {
+      this.effect({kind:'strike',x:e.x,y:e.y,tx:Math.atan2(e.y-this.player.y,e.x-this.player.x),
+        radius:e.hp<=0?24:14,color:weapon==='ember'?0xffbb76:weapon==='spark'?0xb7e4d4:0xe5cb93});
+    }
     if(this.ticks%4===0||damage>35)this.effect({kind:'hit',x:e.x,y:e.y,text:String(Math.round(damage)),color:0xf4db9c});
     // Secondary hits cannot trigger other procs: bounded work, no recursive feedback loops.
     if(!secondary&&e.proc<=0){
@@ -88,6 +92,7 @@ export class Combat {
   }
   private cast(weapon:WeaponId,level:number) {
     const target=this.nearest(this.player.x,this.player.y,weapon==='comet'?480:weapon==='ember'?350:240);if(!target)return;
+    this.effect({kind:'cast',x:this.player.x,y:this.player.y,tx:target.x,ty:target.y});
     const scale=(1+(level-1)*0.34)*this.power;
     if(weapon==='spark'){
       let current=target;let previous:{x:number;y:number}=this.player;const visited=new Set<number>();
@@ -115,7 +120,7 @@ export class Combat {
     dt=Math.min(dt,0.05);this.seconds+=dt;this.ticks++;this.effects=[];
     const p=this.player;p.invincible=Math.max(0,p.invincible-dt);
     const length=Math.hypot(control.x,control.y);p.moving=length>0.05;
-    if(p.moving){const norm=Math.max(1,length);const speed=this.character.speed*(1+(this.build.stride??0)*0.08);p.x=clamp(p.x+control.x/norm*speed*dt,35,WORLD.width-35);p.y=clamp(p.y+control.y/norm*speed*dt,35,WORLD.height-35);p.angle=Math.atan2(control.y,control.x);}
+    if(p.moving){const norm=Math.max(1,length);const speed=this.character.speed*(1+(this.build.stride??0)*0.08);p.x+=control.x/norm*speed*dt;p.y+=control.y/norm*speed*dt;p.angle=Math.atan2(control.y,control.x);}
     if(this.seconds>=480){this.ended=true;return;}
     if(this.seconds>=360&&!this.bossSpawned){this.bossSpawned=true;this.spawn('boss');this.effect({kind:'level',x:p.x,y:p.y,text:'古树守卫苏醒了'});}
     this.spawnClock-=dt;this.eliteClock-=dt;
@@ -124,11 +129,17 @@ export class Combat {
     for(const e of this.enemies){
       if(e.hp<=0)continue;e.clock-=dt;e.slow=Math.max(0,e.slow-dt);e.proc=Math.max(0,e.proc-dt);e.flash=Math.max(0,e.flash-dt);e.spore=Math.max(0,e.spore-dt);
       if(e.burn>0){e.burn-=dt;e.burnClock-=dt;if(e.burnClock<=0){e.burnClock=0.5;this.hit(e,5*this.power*(1+(this.build.ember??1)*0.2),'ember',true);}}
+      if (e.kind==='boss' && distance2(e,p)>1150**2) {
+        // Preserve health and phase when the runner leaves the encounter behind.
+        const ahead=p.angle;
+        e.x=p.x+Math.cos(ahead)*640;
+        e.y=p.y+Math.sin(ahead)*640;
+      }
       const dx=p.x-e.x,dy=p.y-e.y,dist=Math.hypot(dx,dy)||1;let speed=e.speed*(e.slow>0?(e.kind==='boss'?0.8:0.52):1);
       if(e.kind==='twig'&&e.clock<0.6)speed*=1.8;
       if(e.kind==='spitter'&&dist<280)speed=0;
       if(e.kind==='boss'&&e.hp<e.maxHp*.5){speed*=1.5;e.phase=1;}
-      e.x=clamp(e.x+dx/dist*speed*dt,25,WORLD.width-25);e.y=clamp(e.y+dy/dist*speed*dt,25,WORLD.height-25);
+      e.x+=dx/dist*speed*dt;e.y+=dy/dist*speed*dt;
       if(dist<e.radius+15)this.hurt(e.attack);
       if(e.clock<=0){
         e.clock=e.kind==='boss'?(e.phase?2.8:4):e.kind==='twig'?3.5:3;
@@ -166,7 +177,7 @@ export class Combat {
         if(shot.pierce<=0){shot.life=0;break;}
       }
     }
-    this.shots=this.shots.filter(s=>s.life>0&&s.x>-30&&s.x<WORLD.width+30&&s.y>-30&&s.y<WORLD.height+30);
+    this.shots=this.shots.filter(s=>s.life>0);
     for(const e of this.enemies)if(e.hp<=0){
       this.kills++;const elite=['boss','brute','crystal'].includes(e.kind);const value=elite?24:3;
       // Merge overflow XP rather than dropping rewards when a player circles the arena.
@@ -174,10 +185,10 @@ export class Combat {
       if(this.drops.length<320&&(elite||this.rng.next()<0.025))this.drops.push({id:this.nextId(),x:e.x+12,y:e.y,value:elite?22:12,kind:'heal'});
       if(e.kind==='boss'){this.won=true;this.ended=true;}
     }
-    this.enemies=this.enemies.filter(e=>e.hp>0);
+    this.enemies=this.enemies.filter(e=>e.hp>0 && (e.kind==='boss' || distance2(e,p)<1400**2));
     const pickup=(98+(this.build.reach??0)*12)*(this.character.id==='hazel'?1.2:1);
     this.drops=this.drops.filter(d=>{
-      const dist=Math.hypot(d.x-p.x,d.y-p.y);if(dist<pickup){const step=320*dt;d.x+=(p.x-d.x)/Math.max(1,dist)*Math.min(step,dist);d.y+=(p.y-d.y)/Math.max(1,dist)*Math.min(step,dist);}
+      const dist=Math.hypot(d.x-p.x,d.y-p.y);if(dist>1600)return false;if(dist<pickup){const step=320*dt;d.x+=(p.x-d.x)/Math.max(1,dist)*Math.min(step,dist);d.y+=(p.y-d.y)/Math.max(1,dist)*Math.min(step,dist);}
       if(dist>22)return true;
       if(d.kind==='heal'){p.hp=Math.min(p.maxHp,p.hp+d.value);this.effect({kind:'heal',x:p.x,y:p.y,text:`+${d.value}`});}
       else this.xp+=d.value*(1+(this.build.fortune??0)*.1);return false;
