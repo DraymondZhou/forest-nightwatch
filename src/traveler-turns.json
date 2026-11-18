@@ -1,0 +1,93 @@
+{
+  "frames": {
+    "head-side": {
+      "frame": {
+        "x": 6,
+        "y": 2,
+        "w": 116,
+        "h": 124
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 116,
+        "h": 124
+      },
+      "sourceSize": {
+        "w": 116,
+        "h": 124
+      }
+    },
+    "head-back": {
+      "frame": {
+        "x": 135,
+        "y": 2,
+        "w": 113,
+        "h": 124
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 113,
+        "h": 124
+      },
+      "sourceSize": {
+        "w": 113,
+        "h": 124
+      }
+    },
+    "body-side": {
+      "frame": {
+        "x": 16,
+        "y": 130,
+        "w": 95,
+        "h": 124
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 95,
+        "h": 124
+      },
+      "sourceSize": {
+        "w": 95,
+        "h": 124
+      }
+    },
+    "body-back": {
+      "frame": {
+        "x": 136,
+        "y": 130,
+        "w": 112,
+        "h": 124
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 112,
+        "h": 124
+      },
+      "sourceSize": {
+        "w": 112,
+        "h": 124
+      }
+    }
+  },
+  "meta": {
+    "image": "traveler-turns.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 256,
+      "h": 256
+    },
+    "scale": "1"
+  }
+}

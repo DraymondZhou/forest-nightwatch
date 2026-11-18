@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import {Combat,type EnemyKind,type Effect} from './combat';
 
+import turnAtlas from './traveler-turns.json';
 import travelerAtlas from './traveler-atlas.json';
 import { PickupSprites } from './pickups';
 import { Woodland } from './terrain';
@@ -29,6 +30,8 @@ export class ForestScene extends Phaser.Scene {
   preload(){
     this.load.spritesheet('pickups',art('pickups.png'),{frameWidth:64,frameHeight:64});
     this.load.image('ground',art('woodcut-ground.webp'));this.load.image('props',art('woodcut-props.png'));this.load.image('enemies',art('woodcut-enemies.png'));
+    this.load.spritesheet('grip',art('grip-parts.png'),{frameWidth:128,frameHeight:128});
+    this.load.atlas('turns',art('traveler-turns.png'),turnAtlas);
     this.load.atlas('traveler',art('traveler.png'),travelerAtlas);
     this.load.on('loaderror',()=>this.hooks.error('部分美术资源加载失败，请检查网络后重新加载。'));
   }

@@ -1,25 +1,33 @@
 import Phaser from 'phaser';
+import { ARM_LENGTH, bendArm, facingFromVector, type Facing } from './pose';
 
 type Bone = Phaser.GameObjects.Container;
+type Image = Phaser.GameObjects.Image;
 
-// The paper parts have different source resolutions. Fit one dimension only.
-// Every pivot below sits inside the painted joint, including the wand sleeve.
 export class WitchRig {
   readonly root: Bone;
   private readonly hips: Bone;
   private readonly chest: Bone;
   private readonly head: Bone;
+  private readonly face: Image;
+  private readonly cloak: Image;
   private readonly backLeg: Bone;
   private readonly frontLeg: Bone;
-  private readonly backArm: Bone;
+  private readonly farBoot: Image;
+  private readonly nearBoot: Image;
+  private footView: Facing = 'front';
+  private readonly freeArm: Bone;
   private readonly wandArm: Bone;
   private readonly wandElbow: Bone;
   private readonly wand: Bone;
   private readonly tip = new Phaser.Math.Vector2();
+  private readonly joints = {shoulder:0, elbow:0};
   private phase = 0;
   private speed = 0;
   private castTime = 1;
-  private facing = 1;
+  private walkFacing: Facing = 'front';
+  private view: Facing = 'front';
+  private attackFacing: Facing = 'front';
   private aim = 0;
 
   constructor(scene: Phaser.Scene, palette: number) {
@@ -33,72 +41,122 @@ export class WitchRig {
       const image = scene.add.image(0, 0, 'traveler', name).setOrigin(x, y).setTint(tint);
       image.setScale(height / image.height);
       bone.add(image);
+      return image;
+    };
+    const gripPart = (bone: Bone, frame: number, originY: number) => {
+      bone.add(scene.add.image(0,0,'grip',frame).setOrigin(.5,originY/32).setScale(.25));
     };
     this.hips = joint(this.root, 0, 2);
     this.backLeg = joint(this.hips, -5.3, 1);
     this.frontLeg = joint(this.hips, 5.1, 1.6);
-    skin(this.backLeg, 'left-leg', 24, .45, .12, 0xc0b8a0);
-    skin(this.frontLeg, 'right-leg', 24, .47, .12);
+    this.farBoot = skin(this.backLeg,'left-leg',24,.45,.12,0xc0b8a0);
+    this.nearBoot = skin(this.frontLeg,'right-leg',24,.47,.12);
 
-    this.chest = joint(this.hips, 0, -22);
-    this.backArm = joint(this.chest, -9.4, 6);
-    skin(this.backArm, 'left-upper', 12, .32, .17, 0xd2c6af);
-    const backElbow = joint(this.backArm, .95, 8.6);
-    skin(backElbow, 'left-forearm', 10.8, .48, .14, 0xd2c6af);
-    this.wandArm = joint(this.chest, 9.8, 6.2);
-    skin(this.wandArm, 'right-upper', 11.8, .65, .17);
-    this.wandElbow = joint(this.wandArm, -1.15, 8.3);
-    // Hinge the shaft inside the painted grip. Pointing the staff never twists the wrist.
-    const forearmHeight = 14;
-    this.wand = joint(this.wandElbow, (227 / 343 - .16) * forearmHeight * 343 / 266,
-      (163 / 266 - .13) * forearmHeight);
-    skin(this.wand, 'wand', 23, 227 / 343, 163 / 266);
-    skin(this.wandElbow, 'right-forearm', forearmHeight, .16, .13);
-    // The cloak is the outer garment. Its hem and shoulders cover all four sockets.
-    skin(this.chest, 'body', 32, .5, .09, palette);
-    this.head = joint(this.chest, -.5, 1.7);
-    skin(this.head, 'head', 28.5, .5, .90, palette);
+    this.chest = joint(this.hips,0,-22);
+    this.freeArm = joint(this.chest,8,6);
+    skin(this.freeArm,'left-upper',12,.32,.17,0xd2c6af);
+    const freeElbow = joint(this.freeArm,.95,8.6);
+    skin(freeElbow,'left-forearm',10.8,.48,.14,0xd2c6af);
+    this.cloak = skin(this.chest,'body',32,.5,.09,palette);
+
+    this.wandArm = joint(this.chest,-8,6.3);
+    gripPart(this.wandArm,0,8);
+    this.wandElbow = joint(this.wandArm,0,ARM_LENGTH);
+    gripPart(this.wandElbow,1,8);
+    this.wand = joint(this.wandElbow,0,ARM_LENGTH);
+    // Fingers and shaft share one attachment. Both rotate about the cuff.
+    gripPart(this.wand,2,18);
+
+    this.head = joint(this.chest,-.5,1.7);
+    this.face = skin(this.head,'head',28.5,.5,.90,palette);
+    this.setView('front');
+  }
+
+  private setView(view: Facing) {
+    this.view = view;
+    const side = view === 'left' || view === 'right';
+    const rear = view === 'back';
+    const atlas = view === 'front' ? 'traveler' : 'turns';
+    const suffix = side ? '-side' : rear ? '-back' : '';
+    this.face.setTexture(atlas,'head'+suffix).setScale(28.5/this.face.height);
+    this.cloak.setTexture(atlas,'body'+suffix).setScale(32/this.cloak.height);
+    this.face.setOrigin(side ? .49 : .50,rear ? .92 : .90);
+    this.cloak.setOrigin(.5,.09);
+    this.chest.scaleX = view === 'left' ? -1 : 1;
+    this.head.x = side ? 1.2 : -.5;
+    this.wandArm.x = view === 'right' ? -4.8 : view === 'front' ? -8.3 : 8.6;
+    this.freeArm.x = -this.wandArm.x;
+    // Keep the anatomical right hand. On a left turn and on the back view the
+    // right sleeve passes behind the coat. The near sleeve crosses its front.
+    this.chest.remove(this.wandArm);
+    const coatIndex = this.chest.getIndex(this.cloak);
+    this.chest.addAt(this.wandArm,coatIndex + (view==='right'||view==='front' ? 1 : 0));
+  }
+
+  private turnFeet(view: Facing) {
+    if (view === this.footView) return;
+    this.footView = view;
+    if (view === 'front') {
+      this.farBoot.setTexture('traveler','left-leg').setOrigin(.45,.12).setFlipX(false);
+      this.nearBoot.setTexture('traveler','right-leg').setOrigin(.47,.12).setFlipX(false);
+      this.farBoot.setScale(24/this.farBoot.height);
+      this.nearBoot.setScale(24/this.nearBoot.height);
+    } else {
+      const frame = view === 'back' ? 4 : 3;
+      this.farBoot.setTexture('grip',frame).setOrigin(.5,5/32).setScale(.25).setFlipX(view==='left');
+      this.nearBoot.setTexture('grip',frame).setOrigin(.5,5/32).setScale(.25).setFlipX(view==='left');
+    }
   }
 
   cast(dx: number, dy = 0) {
-    if (Math.abs(dx) > 2) this.facing = dx < 0 ? -1 : 1;
-    this.aim = Phaser.Math.Clamp(Math.atan2(dy, Math.abs(dx)), -.65, .65);
-    this.root.scaleX = this.facing;
+    // A volley may emit several casts within one simulation tick.
+    if (this.castTime < .13) return;
+    this.attackFacing = facingFromVector(dx,dy,this.view);
+    if (this.attackFacing !== this.view) this.setView(this.attackFacing);
+    this.aim = Math.atan2(dy,Math.abs(dx));
     this.castTime = 0;
   }
 
   update(dt: number, moving: boolean, angle: number, invincible: boolean, seconds: number) {
-    this.speed += ((moving ? 1 : 0) - this.speed) * (1 - Math.exp(-dt * 16));
-    this.phase += dt * (2 + this.speed * 9);
+    this.speed += ((moving ? 1 : 0)-this.speed)*(1-Math.exp(-dt*16));
+    this.phase += dt*(2+this.speed*9);
     this.castTime += dt;
-    if (this.castTime > .30 && moving && Math.abs(Math.cos(angle)) > .25)
-      this.facing = Math.cos(angle) < 0 ? -1 : 1;
-    this.root.scaleX = this.facing;
-    this.root.alpha = invincible ? .65 + .35 * Math.abs(Math.sin(seconds * 28)) : 1;
-    const step = Math.sin(this.phase) * this.speed;
-    this.backLeg.rotation = -.06 + step * .16;
-    this.frontLeg.rotation = .05 - step * .16;
-    this.backLeg.y = 1 - Math.max(0, step) * 2.4;
-    this.frontLeg.y = 1.6 + Math.min(0, step) * 2.4;
-    this.hips.y = 2 - Math.abs(step) * 1.35;
-    this.chest.rotation = step * .028;
-    this.chest.y = -22 + Math.sin(seconds * 2.8) * .35;
-    this.head.rotation = -this.chest.rotation * .65;
-    this.backArm.rotation = .16 - step * .19;
-    // A compact recoil, a forward snap and a longer settle, all about the elbow.
+    if (moving) this.walkFacing = facingFromVector(Math.cos(angle),Math.sin(angle),this.walkFacing);
+    const look = this.castTime < .29 ? this.attackFacing : moving ? this.walkFacing : this.view;
+    if (look !== this.view) this.setView(look);
+    if (moving || this.castTime > .29) this.turnFeet(moving ? this.walkFacing : look);
+
+    const step = Math.sin(this.phase)*this.speed;
+    const sideStep = this.walkFacing==='left' ? -1 : 1;
+    this.root.alpha = invincible ? .65+.35*Math.abs(Math.sin(seconds*28)) : 1;
+    this.backLeg.rotation = -.06+step*.16*sideStep;
+    this.frontLeg.rotation = .05-step*.16*sideStep;
+    this.backLeg.y = 1-Math.max(0,step)*2.4;
+    this.frontLeg.y = 1.6+Math.min(0,step)*2.4;
+    this.hips.y = 2-Math.abs(step)*1.35;
+    this.chest.rotation = step*.024;
+    this.chest.y = -22+Math.sin(seconds*2.8)*.35;
+    this.head.rotation = -this.chest.rotation*.65;
+    this.freeArm.rotation = (this.freeArm.x>0 ? -.12 : .12) - step*.14;
+
     const t = this.castTime;
-    const thrust = t < .05 ? -.22 * Math.sin(t / .05 * Math.PI)
-      : t < .12 ? Math.sin((t - .05) / .07 * Math.PI / 2)
-      : Math.max(0, 1 - (t - .12) / .21) ** 2;
-    this.wandArm.rotation = -.33 - thrust * .30 + step * .045;
-    this.wandElbow.rotation = -.12 - thrust * .10;
-    this.wand.rotation = thrust * (1.58 + this.aim * .75);
+    const stroke = t < .05 ? -.2*Math.sin(t/.05*Math.PI)
+      : t < .12 ? Math.sin((t-.05)/.07*Math.PI/2)
+      : Math.max(0,1-(t-.12)/.21)**2;
+    // Keep a folded elbow and the grip close to the chest. The wrist leads a
+    // short arc; the tip supplies most of the visible travel.
+    const front = this.view==='front', rear = this.view==='back', far = this.view==='left';
+    const dx = (front ? 2.5 : rear ? 5.5 : far ? 7.5 : 8.2) + stroke*(front ? 1.5 : 2.8);
+    const dy = (front ? 10 : rear ? 9 : 8.5) - stroke*2.8 + step*.45;
+    bendArm(dx,dy,rear ? -1 : 1,this.joints);
+    this.wandArm.rotation = this.joints.shoulder;
+    this.wandElbow.rotation = this.joints.elbow;
+    const rest = front ? -.96 : rear ? .93 : .96;
+    const attack = front ? -2.30 : rear ? .28 : Math.PI/2 + Phaser.Math.Clamp(this.aim,-.8,.8);
+    this.wand.rotation = rest + (attack-rest)*stroke - this.joints.shoulder-this.joints.elbow;
   }
 
-  wandTip() {
-    return this.wand.getWorldTransformMatrix().transformPoint(9.8, -10.6, this.tip);
-  }
-
-  fall() { this.root.scene.tweens.add({targets: this.root, angle: -70, alpha: .5, duration: 350}); }
+  wandTip() { return this.wand.getWorldTransformMatrix().transformPoint(.4,-16.75,this.tip); }
+  fall() { this.root.scene.tweens.add({targets:this.root,angle:-70,alpha:.5,duration:350}); }
   destroy() { this.root.destroy(true); }
 }
