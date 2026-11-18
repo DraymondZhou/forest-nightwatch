@@ -12,7 +12,7 @@ export const ABILITIES: Ability[] = [
   { id:'comet',name:'流星',icon:'✧',color:'#dfb8ef',kind:'weapon',max:5,description:'穿透敌群的星光，擅长远距离与首领战。',tags:['星','穿透'] },
   { id:'power',name:'余辉',icon:'☀',color:'#e9c988',kind:'passive',max:4,description:'全部直接伤害 +12%。',tags:['伤害'] },
   { id:'haste',name:'节拍',icon:'»',color:'#9ee0d1',kind:'passive',max:4,description:'施法间隔缩短，最多降低 28%。',tags:['频率'] },
-  { id:'reach',name:'共鸣',icon:'◎',color:'#dfc294',kind:'passive',max:4,description:'范围 +10%，拾取距离 +18%。',tags:['范围'] },
+  { id:'reach',name:'共鸣',icon:'◎',color:'#dfc294',kind:'passive',max:4,description:'范围 +10%，基础拾取半径增加 12。',tags:['范围'] },
   { id:'vigor',name:'生息',icon:'♡',color:'#e8a3a2',kind:'passive',max:4,description:'最大生命 +20，并立即恢复 20 生命。',tags:['生存'] },
   { id:'stride',name:'轻步',icon:'⌁',color:'#adcfbb',kind:'passive',max:4,description:'移动速度 +8%，受伤无敌时间延长。',tags:['移动'] },
   { id:'fortune',name:'星露',icon:'◇',color:'#dec7ec',kind:'passive',max:4,description:'经验获取 +10%，每级恢复少量生命。',tags:['成长'] }

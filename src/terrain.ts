@@ -10,7 +10,7 @@ function hash(x: number, y: number, seed: number) {
 export class Woodland {
   private readonly floor: Phaser.GameObjects.TileSprite;
   private readonly props: Phaser.GameObjects.Image[];
-  private lastCell = '';
+  private lastX=NaN;private lastY=NaN;private lastSeed=NaN;
   constructor(scene: Phaser.Scene) {
     this.floor = scene.add.tileSprite(0, 0, 1152, 768, 'ground').setOrigin(0).setDepth(-200000);
     // 7 x 5 cells cover the landscape viewport plus a margin on every side.
@@ -19,11 +19,10 @@ export class Woodland {
 
   follow(x: number, y: number, seed: number) {
     const left = Math.floor(x - 576), top = Math.floor(y - 384);
-    this.floor.setPosition(left, top).setTilePosition(left, top);
+    if(this.floor.x!==left||this.floor.y!==top)this.floor.setPosition(left, top).setTilePosition(left, top);
     const cx = Math.floor(x / 200), cy = Math.floor(y / 200);
-    const cell = [cx,cy,seed].join(',');
-    if (cell === this.lastCell) return;
-    this.lastCell = cell;
+    if(cx===this.lastX&&cy===this.lastY&&seed===this.lastSeed)return;
+    this.lastX=cx;this.lastY=cy;this.lastSeed=seed;
     let index = 0;
     for (let j = cy-2; j <= cy+2; j++) {
       for (let i = cx-3; i <= cx+3; i++) {

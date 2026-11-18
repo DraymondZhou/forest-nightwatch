@@ -1,0 +1,53 @@
+{
+  "frames": {
+    "front": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 124,
+        "h": 119
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 124,
+        "h": 119
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 124,
+        "h": 119
+      }
+    },
+    "side": {
+      "frame": {
+        "x": 128,
+        "y": 0,
+        "w": 116,
+        "h": 124
+      },
+      "rotated": false,
+      "trimmed": false,
+      "sourceSize": {
+        "w": 116,
+        "h": 124
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 116,
+        "h": 124
+      }
+    }
+  },
+  "meta": {
+    "image": "hurt-faces.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 256,
+      "h": 128
+    },
+    "scale": "1"
+  }
+}

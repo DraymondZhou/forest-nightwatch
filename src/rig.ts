@@ -29,6 +29,21 @@ export class WitchRig {
   private view: Facing = 'front';
   private attackFacing: Facing = 'front';
   private aim = 0;
+  private hurtLeft = 0;
+  private recoilX = 0;
+  private recoilY = 0;
+  private grimacing = false;
+  private faceFrame(view:Facing){
+    const side=view==='left'||view==='right';
+    if(this.grimacing && view!=='back')this.face.setTexture('hurt-faces',side?'side':'front');
+    else this.face.setTexture(view==='front'?'traveler':'turns',view==='front'?'head':side?'head-side':'head-back');
+    this.face.setScale(28.5/this.face.height).setOrigin(side?.49:.50,view==='back'?.92:.90);
+  }
+  hurt(dx:number,dy:number){
+    const length=Math.hypot(dx,dy)||1;
+    this.recoilX=dx/length;this.recoilY=dy/length;
+    this.hurtLeft=.30;this.grimacing=true;this.faceFrame(this.view);
+  }
 
   constructor(scene: Phaser.Scene, palette: number) {
     this.root = scene.add.container();
@@ -78,9 +93,9 @@ export class WitchRig {
     const rear = view === 'back';
     const atlas = view === 'front' ? 'traveler' : 'turns';
     const suffix = side ? '-side' : rear ? '-back' : '';
-    this.face.setTexture(atlas,'head'+suffix).setScale(28.5/this.face.height);
+    this.faceFrame(view);
     this.cloak.setTexture(atlas,'body'+suffix).setScale(32/this.cloak.height);
-    this.face.setOrigin(side ? .49 : .50,rear ? .92 : .90);
+
     this.cloak.setOrigin(.5,.09);
     this.chest.scaleX = view === 'left' ? -1 : 1;
     this.head.x = side ? 1.2 : -.5;
@@ -110,33 +125,43 @@ export class WitchRig {
 
   cast(dx: number, dy = 0) {
     // A volley may emit several casts within one simulation tick.
-    if (this.castTime < .13) return;
+    if (this.castTime < .13 || this.hurtLeft>.16) return;
     this.attackFacing = facingFromVector(dx,dy,this.view);
     if (this.attackFacing !== this.view) this.setView(this.attackFacing);
     this.aim = Math.atan2(dy,Math.abs(dx));
     this.castTime = 0;
   }
 
-  update(dt: number, moving: boolean, angle: number, invincible: boolean, seconds: number) {
+  update(dt: number, moving: boolean, angle: number, invincible: boolean, seconds: number, dashTime=0) {
     this.speed += ((moving ? 1 : 0)-this.speed)*(1-Math.exp(-dt*16));
     this.phase += dt*(2+this.speed*9);
     this.castTime += dt;
+    this.hurtLeft=Math.max(0,this.hurtLeft-dt);
+    const depth=this.hurtLeft>.025?1800:1000;
+    if(this.root.depth!==depth)this.root.setDepth(depth);
+    if(this.grimacing && this.hurtLeft<=.06){this.grimacing=false;this.faceFrame(this.view);}
+    const recoil=Math.sin(Math.min(1,(.30-this.hurtLeft)/.07)*Math.PI/2)*(this.hurtLeft/.30)**2;
+    const lunge=Math.sin(Math.PI*Math.min(1,dashTime/.20));
     if (moving) this.walkFacing = facingFromVector(Math.cos(angle),Math.sin(angle),this.walkFacing);
     const look = this.castTime < .29 ? this.attackFacing : moving ? this.walkFacing : this.view;
-    if (look !== this.view) this.setView(look);
+    if (look !== this.view && this.hurtLeft<.16) this.setView(look);
     if (moving || this.castTime > .29) this.turnFeet(moving ? this.walkFacing : look);
 
     const step = Math.sin(this.phase)*this.speed;
     const sideStep = this.walkFacing==='left' ? -1 : 1;
-    this.root.alpha = invincible ? .65+.35*Math.abs(Math.sin(seconds*28)) : 1;
+    this.root.alpha = invincible ? .84+.16*Math.abs(Math.sin(seconds*7)) : 1;
     this.backLeg.rotation = -.06+step*.16*sideStep;
     this.frontLeg.rotation = .05-step*.16*sideStep;
     this.backLeg.y = 1-Math.max(0,step)*2.4;
     this.frontLeg.y = 1.6+Math.min(0,step)*2.4;
-    this.hips.y = 2-Math.abs(step)*1.35;
-    this.chest.rotation = step*.024;
+    this.hips.x=this.recoilX*recoil*4;
+    this.hips.y=2-Math.abs(step)*1.35+this.recoilY*recoil*2+lunge*2.4;
+    this.backLeg.rotation+=lunge*.30*sideStep;
+    this.frontLeg.rotation-=lunge*.22*sideStep;
+    this.chest.rotation = step*.035+this.recoilX*recoil*.19+lunge*.15*Math.cos(angle);
     this.chest.y = -22+Math.sin(seconds*2.8)*.35;
-    this.head.rotation = -this.chest.rotation*.65;
+    this.head.rotation = -this.chest.rotation*.45-this.recoilX*recoil*.11;
+    this.head.y=1.7+recoil*2+lunge*.7;
     this.freeArm.rotation = (this.freeArm.x>0 ? -.12 : .12) - step*.14;
 
     const t = this.castTime;
@@ -148,7 +173,7 @@ export class WitchRig {
     const front = this.view==='front', rear = this.view==='back', far = this.view==='left';
     const dx = (front ? 2.5 : rear ? 5.5 : far ? 7.5 : 8.2) + stroke*(front ? 1.5 : 2.8);
     const dy = (front ? 10 : rear ? 9 : 8.5) - stroke*2.8 + step*.45;
-    bendArm(dx,dy,rear ? -1 : 1,this.joints);
+    bendArm(dx-recoil*2.7,dy-recoil*3-lunge*1.8,rear ? -1 : 1,this.joints);
     this.wandArm.rotation = this.joints.shoulder;
     this.wandElbow.rotation = this.joints.elbow;
     const rest = front ? -.96 : rear ? .93 : .96;
