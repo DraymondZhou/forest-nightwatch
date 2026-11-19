@@ -1,3 +1,4 @@
+import {drawMelee,drawEquipment,drawWarning,drawArrow,drawEnemyMissile} from './encounterInk';
 import Phaser from 'phaser';
 import {drawLightning,shapeLightning,stormImpactFrame} from './lightning';
 import {FrameStats} from './frameStats';
@@ -15,6 +16,7 @@ import { art } from './art';
 import {WitchRig} from './rig';
 import type {AudioDirector} from './audio';
 
+const enemyTexture=(kind:string)=>kind==='boar'||kind==='mothQueen'?'mini-bosses':'enemies';
 const TINT:Record<string,number>={spark:0xa0ecdf,spore:0xc4d599,leaf:0xe2d79b,ember:0xf2b17a,frost:0xb8d9ef,comet:0xd2b0e5,enemy:0xf29483};
 type VisualEffect=Effect&{life:number;max:number;fromWand?:boolean;arc?:ReturnType<typeof shapeLightning>};
 export interface SceneHooks {tick:(sim:Combat,stats:FrameStats)=>void;health:(sim:Combat)=>void;showFps:()=>boolean;upgrade:()=>void;gift:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean;showEnemyHealth:()=>boolean;showEnemyHealthNumbers:()=>boolean}
@@ -38,6 +40,7 @@ export class ForestScene extends Phaser.Scene {
   constructor(hooks:SceneHooks){super('forest');this.hooks=hooks;}
   preload(){
     this.load.atlas('hurt-faces',art('hurt-faces.png'),hurtFaces);
+    this.load.spritesheet('mini-bosses',art('mini-bosses.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('field',art('field-marks.png'),{frameWidth:96,frameHeight:96});
     this.load.spritesheet('storm-impact',art('storm-impact.png'),{frameWidth:64,frameHeight:64});
     this.load.spritesheet('pickups',art('pickups.png'),{frameWidth:64,frameHeight:64});
@@ -110,7 +113,7 @@ export class ForestScene extends Phaser.Scene {
     this.lastGather=-1;this.stickState='';
     this.sim=sim;this.accumulator=0;this.uiClock=0;this.frameStats.reset();this.effects=[];
     this.sprites.forEach(s=>{s.setVisible(false);this.spritePool.push(s)});this.sprites.clear();this.texts.forEach(t=>t.setVisible(false));
-    this.rig?.destroy();this.rig=new WitchRig(this,sim.character.id==='hazel'?0xffffff:sim.character.id==='fern'?0x9ed7ba:0xc8b5ed);this.running=true;
+    this.rig?.destroy();this.rig=new WitchRig(this,sim.character.id==='hazel'?0xffffff:sim.character.id==='fern'?0x9ed7ba:0xc8b5ed,sim.path.job==='mage');this.running=true;
     this.rig.update(0,false,0,false,0);
     this.rig.root.setPosition(sim.player.x,sim.player.y).setDepth(1000);this.cameras.main.centerOn(sim.player.x,sim.player.y);
     this.cameras.main.startFollow(this.rig.root,true,.12,.12);this.cameras.main.setZoom(1);
@@ -182,7 +185,7 @@ export class ForestScene extends Phaser.Scene {
         if(!this.hooks.lowQuality()){const t=this.texts[this.textCursor++%this.texts.length];this.tweens.killTweensOf(t);t.setPosition(effect.x,effect.y-24).setText(effect.kind==='evade'?'险避':effect.text??'').setVisible(true).setAlpha(1).setColor(effect.kind==='evade'?'#bde7ca':'#f0ddb6');this.tweens.add({targets:t,y:t.y-25,alpha:0,duration:500,onComplete:()=>t.setVisible(false)});}
 
       }else if(effect.kind==='heal')this.hooks.audio.play('heal');
-      if(effect.kind!=='hit'&&effect.kind!=='wound'&&this.effects.length<100){const life=effect.kind==='dash'?.25:effect.kind==='evade'?.32:effect.kind==='strike'?.18:effect.kind==='gather'?.22:.5;this.effects.push({...effect,life,max:life,fromWand});}
+      if(effect.kind!=='hit'&&effect.kind!=='wound'&&this.effects.length<100){const life=effect.kind==='dash'?.25:effect.kind==='evade'?.32:effect.kind==='slash'||effect.kind==='impactZone'?.18:effect.kind==='strike'?.18:effect.kind==='gather'?.22:.5;this.effects.push({...effect,life,max:life,fromWand});}
     }
   }
   private showDefeat(effect: Effect) {
@@ -195,7 +198,7 @@ export class ForestScene extends Phaser.Scene {
     const angle=effect.tx??0;
     r.x=effect.x;r.y=effect.y-10;r.age=0;r.size=(effect.radius??17)*3.5*1.16;
     r.dx=Math.cos(angle)*15;r.dy=Math.sin(angle)*10;
-    r.sprite.setFrame(enemyRestFrame(effect.enemyKind)).setFlipX(effect.x>this.sim!.player.x)
+    r.sprite.setTexture(enemyTexture(effect.enemyKind),enemyRestFrame(effect.enemyKind)).setFlipX(effect.x>this.sim!.player.x)
       .setDepth(998).setVisible(true);
   }
   private drawRemains(dt:number) {
@@ -225,9 +228,9 @@ export class ForestScene extends Phaser.Scene {
     }
     for(const z of sim.zones){
       if(!visible(z.x,z.y,z.radius))continue;
-      if(z.kind==='warning'){g.fillStyle(0xd66d61,.1+.12*Math.sin(z.timer*15)**2);g.fillCircle(z.x,z.y,z.radius);g.lineStyle(3,0xf3a087,.85);g.strokeCircle(z.x,z.y,z.radius);g.lineStyle(2,0xf3a087,.5);g.strokeCircle(z.x,z.y,z.radius*Math.min(1,z.timer/1.3));}
+      if(z.kind==='warning'){drawWarning(g,z.x,z.y,z.radius,z.shape??'disk',z.angle??0,z.timer/(z.duration??1.3));}
       else{
-        if(z.kind==='spore' && sim.character.id==='fern' && sim.masteryActive && !z.bloomed){
+        if(z.kind==='spore' && sim.pathId==='fern' && sim.masteryActive && !z.bloomed){
           const size=Math.min(1,z.timer);
           g.lineStyle(2,0xbadb98,.65);g.beginPath();g.arc(z.x,z.y,z.radius,-Math.PI/2,-Math.PI/2+size*Math.PI*2);g.strokePath();
           this.fieldMarks.paint(MARK.leaf,z.x,z.y,15+9*size,0,.85);
@@ -241,7 +244,7 @@ export class ForestScene extends Phaser.Scene {
       living.add(enemy.id);let sprite=this.sprites.get(enemy.id);
       if(!sprite){
         sprite=this.spritePool.pop()??this.add.image(0,0,'enemies');
-        sprite.setFrame(enemyRestFrame(enemy.kind)).setVisible(true);this.sprites.set(enemy.id,sprite);
+        sprite.setTexture(enemyTexture(enemy.kind),enemyRestFrame(enemy.kind)).setVisible(true);this.sprites.set(enemy.id,sprite);
       }
       if(enemy.frozen<=0 || enemy.flash>0){
         const distance=Math.hypot(enemy.x-sim.player.x,enemy.y-sim.player.y);
@@ -249,10 +252,10 @@ export class ForestScene extends Phaser.Scene {
         if(Number(sprite.frame.name)!==frame)sprite.setFrame(frame);
       }
       const recoil=enemy.flash/.08,weight=enemy.kind==='boss'?2:6,size=enemy.radius*3.5;
-      const airborne=enemy.kind==='moth'||enemy.kind==='crystal';
+      const airborne=enemy.kind==='moth'||enemy.kind==='mothQueen'||enemy.kind==='crystal';
       const lift=airborne?Math.sin(enemy.gait*9+enemy.id)*2:enemy.kind==='slime'?Math.abs(Math.sin(enemy.gait*4.7+enemy.id))*2:0;
       sprite.setPosition(enemy.x+Math.cos(enemy.hitAngle)*recoil*weight,enemy.y-10-lift+Math.sin(enemy.hitAngle)*recoil*weight)
-        .setDisplaySize(size*1.16,size*1.16).setFlipX(enemy.x>sim.player.x);
+        .setDisplaySize(size*1.16,size*1.16).setFlipX(enemy.charge || (enemy.preparing && (enemy.kind==='boar'||enemy.kind==='beetle'||enemy.kind==='twig'||enemy.kind==='brute')) ? Math.cos(enemy.charge?.angle??enemy.attackHeading??0)<0 : enemy.x>sim.player.x);
       if(showHealth)this.health.draw(enemy,sprite.x,sprite.y-size*.46,showNumbers);
       const depth=1000+Math.floor((enemy.y-sim.player.y)/4);if(sprite.depth!==depth)sprite.setDepth(depth);
       if(enemy.flash>.055)sprite.setTint(0xffcf99);else if(enemy.slow>0)sprite.setTint(0xa9d4f0);else sprite.clearTint();
@@ -276,6 +279,9 @@ export class ForestScene extends Phaser.Scene {
     for(const shot of sim.shots){
       if(!visible(shot.x,shot.y,36))continue;
       const angle=Math.atan2(shot.vy,shot.vx);
+      if(shot.weapon==='enemy'){drawEnemyMissile(g,shot.x,shot.y,angle,shot.missile??'seed');continue;}
+      if(shot.weapon==='bow'){drawArrow(g,shot.x,shot.y,angle);continue;}
+      if(shot.weapon==='blade')continue;
       if(!this.hooks.lowQuality()){g.lineStyle(shot.weapon==='comet'?4:2,TINT[shot.weapon],.38);g.lineBetween(shot.x,shot.y,shot.x-shot.vx*.055,shot.y-shot.vy*.055);}
       if(shot.lance){
         const ux=Math.cos(angle),uy=Math.sin(angle);
@@ -283,7 +289,7 @@ export class ForestScene extends Phaser.Scene {
         g.fillTriangle(shot.x+ux*13,shot.y+uy*13,shot.x-ux*37-uy*5,shot.y-uy*37+ux*5,shot.x-ux*22+uy*6,shot.y-uy*22-ux*6);
         g.lineStyle(2,0xffde86,1);g.lineBetween(shot.x-ux*42,shot.y-uy*42,shot.x+ux*13,shot.y+uy*13);
       }
-      this.fieldMarks.paint(MARK[shot.weapon],shot.x,shot.y,shot.weapon==='comet'?32:shot.weapon==='enemy'?22:27,angle);
+      this.fieldMarks.paint(MARK[shot.weapon],shot.x,shot.y,shot.weapon==='comet'?32:27,angle);
     }
     const p=sim.player;g.fillStyle(0x0b2926,.5);g.fillEllipse(p.x,p.y+21,35,13);if(sim.dashTime>0){g.lineStyle(1,0xcbe5b2,.55);g.strokeEllipse(p.x,p.y+16,39,12);}
     if(sim.build.leaf){const count=2+sim.build.leaf,r=(80+sim.build.leaf*7)*sim.reach;g.lineStyle(1,0xe4d998,.16);g.strokeCircle(p.x,p.y,r);for(let i=0;i<count;i++){const a=sim.seconds*2.6+i/count*Math.PI*2;const x=p.x+Math.cos(a)*r,y=p.y+Math.sin(a)*r;this.fieldMarks.paint(MARK.leaf,x,y,25,a+1.8);}}
@@ -291,6 +297,7 @@ export class ForestScene extends Phaser.Scene {
   }
   private drawEffects(dt:number){const g=this.fxInk;g.clear();this.hitMarks.begin();this.stormMarks.begin();for(const e of this.effects){e.life-=dt;if(e.life<=0)continue;const alpha=e.life/e.max;g.lineStyle(e.kind==='chain'?3:2,e.color??0xc8dcac,alpha*.8);if(e.kind==='cast'){
         const tip=this.rig!.wandTip(),r=2+alpha*3;
+        if(e.weapon==='bow'||e.weapon==='blade')continue;
         if(e.weapon==='spark'){
           this.stormMarks.paint(Math.min(5,Math.floor((1-alpha)*6)),tip.x,tip.y,18,-.7,alpha);
           continue;
@@ -314,7 +321,7 @@ export class ForestScene extends Phaser.Scene {
         g.lineStyle(2,0xbfe9e6,alpha*.7);g.strokeCircle(e.x,e.y,radius);
         for(let i=0;i<(this.hooks.lowQuality()?3:8);i++){const a=i*Math.PI/4;this.hitMarks.paint(MARK.frost,e.x+Math.cos(a)*radius,e.y+Math.sin(a)*radius,18+alpha*9,a+Math.PI/2,alpha);}
       }else if(e.kind==='strike'){
-        if(e.weapon && !this.hooks.lowQuality())this.hitMarks.paint(MARK[e.weapon],e.x,e.y-4,16+(1-alpha)*17,(e.tx??0)*.6,alpha);
+        if(e.weapon && e.weapon!=='blade' && e.weapon!=='bow' && !this.hooks.lowQuality())this.hitMarks.paint(MARK[e.weapon],e.x,e.y-4,16+(1-alpha)*17,(e.tx??0)*.6,alpha);
         if(alpha>.65){
           const a=e.tx??0,dx=Math.cos(a),dy=Math.sin(a),r=(e.radius??14)*alpha;
           g.fillStyle(0xffedc5,alpha);
@@ -326,6 +333,11 @@ export class ForestScene extends Phaser.Scene {
           const dx=Math.cos(a),dy=Math.sin(a);
           g.lineBetween(e.x+dx*(4+travel),e.y+dy*(4+travel),e.x+dx*(8+travel+alpha*6),e.y+dy*(8+travel+alpha*6));
         }
+       }else if(e.kind==='slash'){
+        drawMelee(g,e.x,e.y,e.radius!,e.tx!,1-alpha);
+      }else if(e.kind==='impactZone'){
+        if(e.shape==='cleave')drawMelee(g,e.x,e.y,e.radius!,e.tx??0,1-alpha);
+        else {const r=e.radius!;g.lineStyle(3,0xd7ba87,alpha*.73).strokeCircle(e.x,e.y,r*(1.06-alpha*.15));if(e.shape==='ring')g.lineStyle(2,0xe9d3ab,alpha*.60).strokeCircle(e.x,e.y,r*.54);}
       }else if(e.kind==='bloom'){
         const radius=e.radius??72,t=1-alpha;
         g.lineStyle(2,0xc5df96,alpha*.74);g.strokeCircle(e.x,e.y,radius*(.30+t*.70));
@@ -340,7 +352,10 @@ export class ForestScene extends Phaser.Scene {
         drawLightning(g,e.arc,e.x,e.y,e.tx!,e.ty!,age,charged,this.hooks.lowQuality());
         const frame=stormImpactFrame(age,charged);
         if(frame>=0)this.stormMarks.paint(frame,e.tx!,e.ty!,charged?53:33,e.arc.angle);
-      }else{g.strokeCircle(e.x,e.y,(e.radius??40)*(1-alpha*.65));}}this.hitMarks.end();this.stormMarks.end();this.effects=this.effects.filter(e=>e.life>0);}
+      }else{g.strokeCircle(e.x,e.y,(e.radius??40)*(1-alpha*.65));} }
+    const sim=this.sim!;
+    if(sim.path.job!=='mage')drawEquipment(g,sim.player.x,sim.player.y-3,sim.weaponMotion?sim.weaponAngle:sim.player.angle,sim.path.job,sim.weaponMotion);
+    this.hitMarks.end();this.stormMarks.end();this.effects=this.effects.filter(e=>e.life>0);}
   private drawStick(){const g=this.stickInk;
     const state=this.stick?[this.stick.x,this.stick.y,this.movement.x,this.movement.y].join(','):'idle';
     if(state===this.stickState)return;this.stickState=state;g.clear();if(!this.running||(!this.stick&&!this.touchControl.matches))return;const x=this.stick?.x??110,y=this.stick?.y??this.scale.height-115;g.lineStyle(2,0xd9e6d1,.2);g.strokeCircle(x,y,58);g.fillStyle(0xd9e6d1,this.stick?.12:.035);g.fillCircle(x,y,56);g.fillStyle(0xe3eadb,this.stick?.3:.09);g.fillCircle(x+this.movement.x*42,y+this.movement.y*42,23);}

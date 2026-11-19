@@ -1,4 +1,4 @@
-export type WeaponId = 'spark' | 'spore' | 'leaf' | 'ember' | 'frost' | 'comet';
+export type WeaponId = 'spark' | 'spore' | 'leaf' | 'ember' | 'frost' | 'comet' | 'blade' | 'bow';
 export type PassiveId = 'power' | 'haste' | 'reach' | 'vigor' | 'stride' | 'fortune';
 export type UpgradeId = WeaponId | PassiveId;
 export type CharacterId = 'hazel' | 'fern' | 'ash';
@@ -10,8 +10,10 @@ export const ABILITIES: Ability[] = [
   { id:'ember',name:'余烬',icon:'✦',color:'#efae74',kind:'weapon',max:5,description:'火种直击目标并灼烧 3 秒。爆炸越靠近中心伤害越高，周围敌人灼烧 1.5 秒。',tags:['火','爆发'] },
   { id:'frost',name:'霜环',icon:'❄',color:'#b6d5f5',kind:'weapon',max:5,description:'释放寒霜波减速敌人；重复命中结晶。',tags:['霜','控制'] },
   { id:'comet',name:'流星',icon:'✧',color:'#dfb8ef',kind:'weapon',max:5,description:'穿透敌群的星光，擅长远距离与首领战。',tags:['星','穿透'] },
-  { id:'power',name:'余辉',icon:'☀',color:'#e9c988',kind:'passive',max:4,description:'每级提高 10% 魔法伤害。',tags:['伤害'] },
-  { id:'haste',name:'节拍',icon:'»',color:'#9ee0d1',kind:'passive',max:4,description:'施法间隔缩短，四级累计减少 7%、12.5%、17%、20%。',tags:['频率'] },
+  { id:'blade',name:'林刃',icon:'⚔',color:'#e0bc8a',kind:'weapon',max:5,description:'向最近目标挥出一刀，可同时命中扇面内多个敌人。升级增加伤害与攻击距离。',tags:['近战','扇形'] },
+  { id:'bow',name:'猎弓',icon:'➶',color:'#bcd699',kind:'weapon',max:5,description:'射向远处敌人。升级提高伤害，箭可贯穿前排。',tags:['射击','贯穿'] },
+  { id:'power',name:'余辉',icon:'☀',color:'#e9c988',kind:'passive',max:4,description:'每级提高 10% 攻击伤害。',tags:['伤害'] },
+  { id:'haste',name:'节拍',icon:'»',color:'#9ee0d1',kind:'passive',max:4,description:'攻击间隔缩短，四级累计减少 7%、12.5%、17%、20%。',tags:['频率'] },
   { id:'reach',name:'共鸣',icon:'◎',color:'#dfc294',kind:'passive',max:4,description:'范围 +10%，基础拾取半径增加 12。',tags:['范围'] },
   { id:'vigor',name:'生息',icon:'♡',color:'#e8a3a2',kind:'passive',max:4,description:'最大生命 +20，并立即恢复 20 生命。',tags:['生存'] },
   { id:'stride',name:'轻步',icon:'⌁',color:'#adcfbb',kind:'passive',max:4,description:'移动速度 +8%，受伤无敌时间延长。',tags:['移动'] },
@@ -22,19 +24,21 @@ export const MASTERY_LEVEL=6;
 export const MASTERIES:Record<CharacterId,{name:string;tip:string;details:string}>={
   hazel:{name:'游雷',tip:'移动蓄电，拉开距离打出重雷。',details:'每移动 30 步，下一发星雷的射程从 24 步提高到 32 步，首击增加 65% 伤害。未找到目标会保留满电。'},
   fern:{name:'根阵',tip:'绕着孢子场走，把追兵引回阵里。',details:'孢子场落地 1 秒后，踏入或留在场内可令其开花一次。场中敌人受到额外伤害并定身 0.7 秒，首领改为短暂减速。'},
-  ash:{name:'焰枪',tip:'对准敌阵闪避，沿途打穿前排。',details:'发动叶步时，沿闪避方向射出一道焰枪，最多贯穿 3 个目标并点燃。焰枪伤害随余烬等级成长。'}
+  ash:{name:'焰枪',tip:'对准敌阵闪避，沿途打穿前排。',details:'发动闪避时，沿闪避方向射出一道焰枪，最多贯穿 3 个目标并点燃。焰枪伤害随余烬等级成长。'}
 };
 export const CLASS_TALENTS:Record<CharacterId,{name:string;description:string}>={
   hazel:{name:'引雷针',description:'满电的星雷优先锁定射程内的首领或精英，并对它的首击额外提高 25%。'},
   fern:{name:'返青',description:'一次根阵开花卷入至少两个敌人时，恢复 3 点生命。'},
-  ash:{name:'回火',description:'同一支焰枪穿过第二个敌人时，叶步剩余冷却缩短 1 秒。'}
+  ash:{name:'回火',description:'同一支焰枪穿过第二个敌人时，闪避剩余冷却缩短 1 秒。'}
 };
 export const CHARACTERS: { id:CharacterId; name:string; title:string; weapon:WeaponId; hp:number; speed:number; color:number; description:string; unlock:string }[] = [
-  {id:'hazel',name:'榛果',title:'提灯学徒',weapon:'spark',hp:100,speed:185,color:0xd89c60,description:'星雷开局 · 拾取范围 +20%\n带着一盏灯，守住森林的长夜。',unlock:'初始开放'},
-  {id:'fern',name:'蕨',title:'月林守望',weapon:'spore',hp:120,speed:175,color:0x92b695,description:'月孢开局 · 区域持续时间 +25%\n让每一寸土地成为你的同伴。',unlock:'任意角色生存至 3 分钟'},
-  {id:'ash',name:'灰烬',title:'逐星旅人',weapon:'ember',hp:85,speed:205,color:0xa3b6d5,description:'余烬开局 · 爆发伤害 +15%\n沿着余火走向黎明。',unlock:'首次击败森林首领'}
+  {id:'hazel',name:'榛果',title:'提灯学徒',weapon:'spark',hp:100,speed:185,color:0xd89c60,description:'拾取范围 +20%\n带着一盏灯，守住森林的长夜。',unlock:'初始开放'},
+  {id:'fern',name:'蕨',title:'月林守望',weapon:'spore',hp:120,speed:175,color:0x92b695,description:'生命较高，适合贴近敌群\n让每一寸土地成为你的同伴。',unlock:'任意角色生存至 3 分钟'},
+  {id:'ash',name:'灰烬',title:'逐星旅人',weapon:'ember',hp:85,speed:205,color:0xa3b6d5,description:'移动最快，基础生命较少\n沿着余火走向黎明。',unlock:'首次击败森林首领'}
 ];
 export const SYNERGIES = [
+  {id:'cutwind',a:'blade',b:'leaf',name:'风刃',description:'林刃命中时，风叶额外割伤目标。每个目标有独立冷却。'},
+  {id:'firearrow',a:'bow',b:'ember',name:'火箭',description:'箭矢击中敌人时点燃目标两秒。'},
   {id:'stormgarden',a:'spark',b:'spore',name:'雷鸣花园',description:'雷击引爆月孢印记，产生一次小范围爆发。每个敌人独立冷却。'},
   {id:'wildfire',a:'ember',b:'leaf',name:'流火回旋',description:'风叶命中灼烧目标时延长灼烧，并额外溅射一次火花。'},
   {id:'shatter',a:'frost',b:'comet',name:'碎星寒潮',description:'流星击中减速目标时产生碎晶，提升单体伤害并波及附近敌人。'}

@@ -1,3 +1,5 @@
+import {JOBS,PATHS,type Job,type PathId} from './stylesOfPlay';
+import {chiefName,isChief} from './combat';
 import Phaser from 'phaser';
 import './style.css';
 import { AudioDirector } from './audio';
@@ -7,7 +9,7 @@ import { BattleHud } from './battleHud';
 import {DIFFICULTIES,readDifficulty,type Difficulty} from './difficulty';
 import { Combat } from './combat';
 import { ForestScene } from './scene';
-import { CLASS_TALENTS, MASTERY_LEVEL, MASTERIES, ABILITIES, ACHIEVEMENTS, CHARACTERS, SYNERGIES, ability, type CharacterId, type UpgradeId } from './content';
+import { MASTERY_LEVEL, ABILITIES, ACHIEVEMENTS, CHARACTERS, SYNERGIES, ability, type CharacterId, type UpgradeId } from './content';
 import { SaveStore, characterUnlocked, finishRun, unlockedWeapons, xpNeeded } from './model';
 
 const store = new SaveStore({
@@ -16,7 +18,7 @@ const store = new SaveStore({
 });
 const audio = new AudioDirector();
 const app = document.querySelector<HTMLDivElement>('#app')!;
-app.innerHTML = '<div id="world"></div><section id="hud" hidden><div id="wound" aria-hidden="true"><svg viewBox="0 0 120 72" focusable="false"><g fill="#8c333e"><path d="M120 5c-9 1-7 9-18 10l-9 0 6 4-8 3 8 2c9 1 8 7 21 4zM120 40c-8-3-12-2-17 2l-11 2 6 4-10 7 15-3c6-2 10 4 17 2z"/><ellipse cx="81" cy="23" rx="4" ry="2"/><ellipse cx="73" cy="32" rx="2" ry="1.4"/><ellipse cx="84" cy="51" rx="3" ry="1.6"/></g></svg></div><div class="vitals"><span id="health"></span><meter id="hp"></meter><meter id="xp"></meter><small id="mastery"></small></div><b id="clock"></b><button id="pause" aria-label="暂停">Ⅱ</button><div id="skills"></div><output id="perf"></output><div id="boss"></div><div id="objective"></div><button id="dash" aria-label="叶步闪避" title="叶步 · 空格"><span>叶步</span><small id="dash-time">就绪</small></button></section><section id="panel"></section><aside id="orientation">请旋转手机，横屏游戏</aside>';
+app.innerHTML = '<div id="world"></div><section id="hud" hidden><div id="wound" aria-hidden="true"><svg viewBox="0 0 120 72" focusable="false"><g fill="#8c333e"><path d="M120 5c-9 1-7 9-18 10l-9 0 6 4-8 3 8 2c9 1 8 7 21 4zM120 40c-8-3-12-2-17 2l-11 2 6 4-10 7 15-3c6-2 10 4 17 2z"/><ellipse cx="81" cy="23" rx="4" ry="2"/><ellipse cx="73" cy="32" rx="2" ry="1.4"/><ellipse cx="84" cy="51" rx="3" ry="1.6"/></g></svg></div><div class="vitals"><span id="health"></span><meter id="hp"></meter><meter id="xp"></meter><small id="mastery"></small></div><b id="clock"></b><button id="pause" aria-label="暂停">Ⅱ</button><div id="skills"></div><output id="perf"></output><div id="boss"></div><div id="objective"></div><button id="dash" aria-label="闪避" title="闪避 · 空格"><span>闪避</span><small id="dash-time">就绪</small></button></section><section id="panel"></section><aside id="orientation">请旋转手机，横屏游戏</aside>';
 const el = <T extends HTMLElement = HTMLElement>(id:string) => document.getElementById(id) as T;
 const panel = el('panel'), hud = el('hud');
 const battleHud=new BattleHud();
@@ -35,20 +37,33 @@ function home() {
   hud.hidden=true; panel.hidden=false; app.className='cover';
   panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?action('select','开始游戏',true):'<button disabled>游戏加载中…</button>'}${action('journal','守夜手记')}${action('settings','设置')}</nav>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
 }
+let chosenActor:CharacterId='hazel';
+let chosenJob:Job='mage';
+function chooseJob(actor:CharacterId){
+  if(!characterUnlocked(store.data,actor))return;
+  chosenActor=actor;page='job';
+  const cards=Object.entries(JOBS).map(([id,j])=>`<button class="card" data-action="job-${id}"><b class="rune">${j.icon}</b><strong>${j.name}</strong><span>${j.tip}</span></button>`).join('');
+  sheet('选择职业',`<p>${CHARACTERS.find(c=>c.id===actor)!.name} · ${DIFFICULTIES[store.data.settings.difficulty].label}</p><div class="cards">${cards}</div>`,action('select','返回角色'));
+}
+function choosePath(job:Job){
+  chosenJob=job;page='path';
+  const cards=Object.entries(PATHS).filter(([,p])=>p.job===job).map(([id,p])=>`<button class="card" data-action="path-${id}"><b class="rune">${ability(p.weapon).icon}</b><strong>${p.name}</strong><span>${p.tip}</span><small>六级 · ${p.mastery.name}</small></button>`).join('');
+  sheet(JOBS[job].name+' · 选择流派',`<div class="cards">${cards}</div>`,action('back-job','返回职业'));
+}
 function select() {
   page='select';
   const cards=CHARACTERS.map(c=>{
     const open=characterUnlocked(store.data,c.id);
-    return `<button class="card" data-action="play-${c.id}" ${open?'':'disabled'}><b class="rune">${ability(c.weapon).icon}</b><small>${c.title}</small><strong>${c.name}</strong><span>${open?c.description.split('\n')[0]:c.unlock}</span><span class="mastery-tip">${MASTERY_LEVEL} 级 · ${MASTERIES[c.id].name}<br>${MASTERIES[c.id].tip}</span></button>`;
+    return `<button class="card" data-action="play-${c.id}" ${open?'':'disabled'}><small>${c.title}</small><strong>${c.name}</strong><span>${open?c.description.split('\n')[0]:c.unlock}</span><small>生命 ${c.hp}　速度 ${c.speed/10} 步/秒</small></button>`;
   }).join('');
   const difficulty=store.data.settings.difficulty;
   const modes=(Object.keys(DIFFICULTIES) as Difficulty[]).map(id=>`<label><input type="radio" name="difficulty" data-key="difficulty" value="${id}" ${id===difficulty?'checked':''}><span>${DIFFICULTIES[id].label}</span></label>`).join('');
-  sheet('选择角色',`<fieldset class="difficulty"><legend>本局难度</legend>${modes}</fieldset><p id="mode-hint" aria-live="polite">${DIFFICULTIES[difficulty].description}</p><div class="cards">${cards}</div><p>方向键或左侧摇杆移动，魔法自动攻击。空格或右侧「叶步」可闪避，擦过攻击时会吸引附近种荚。甲虫的护甲能抵挡范围冲击，直击和持续伤害有效。六分钟后迎战古树守卫。</p>`,action('home','返回'));
+  sheet('选择角色',`<fieldset class="difficulty"><legend>本局难度</legend>${modes}</fieldset><p id="mode-hint" aria-live="polite">${DIFFICULTIES[difficulty].description}</p><div class="cards">${cards}</div><p>方向键或左侧摇杆移动，自动攻击。空格或右侧按钮可闪避，擦过攻击时会吸引附近种荚。甲虫的护甲能抵挡范围冲击，直击和持续伤害有效。三分钟迎战小首领，六分钟迎战古树守卫。</p>`,action('home','返回'));
 }
 function journal() {
   page='journal';
   const rows=ACHIEVEMENTS.map(a=>`<li><b>${store.data.achievements.includes(a.id)?'✦':'◇'}　${a.name}</b><span>${a.description} · ${a.reward}</span></li>`).join('');
-  sheet('守夜手记',`<p>共守夜 ${store.data.runs} 次　·　累计击败 ${store.data.kills}　·　最长 ${clock(store.data.bestTime)}</p><ul>${rows}</ul><h3>魔法联动</h3><ul>${SYNERGIES.map(s=>`<li><b>${s.name}</b><span>${ability(s.a).name} + ${ability(s.b).name}　${s.description}</span></li>`).join('')}</ul>`,action('home','返回'));
+  sheet('守夜手记',`<p>共守夜 ${store.data.runs} 次　·　累计击败 ${store.data.kills}　·　最长 ${clock(store.data.bestTime)}</p><ul>${rows}</ul><h3>技能联动</h3><ul>${SYNERGIES.map(s=>`<li><b>${s.name}</b><span>${ability(s.a).name} + ${ability(s.b).name}　${s.description}</span></li>`).join('')}</ul>`,action('home','返回'));
 }
 function settings() {
   page='settings';const s=store.data.settings;
@@ -60,9 +75,9 @@ function settings() {
   };
 }
 function syncAudio(){audio.music=store.data.settings.music;audio.sound=store.data.settings.sound;}
-function start(id:CharacterId) {
+function start(id:CharacterId,path:PathId) {
   if(!ready||!characterUnlocked(store.data,id))return;
-  run=new Combat(id,crypto.getRandomValues(new Uint32Array(1))[0],store.data.settings.difficulty);page='battle';app.className='';
+  run=new Combat(id,crypto.getRandomValues(new Uint32Array(1))[0],store.data.settings.difficulty,path);page='battle';app.className='';
   panel.hidden=true;hud.hidden=false;audio.combat=true;audio.paused=false;
   battleHud.reset(store.data.settings.quality==='low');scene.begin(run);if(portrait.matches)pause();
 }
@@ -95,15 +110,15 @@ function upgrade(){
   const choices=run.levelOptions(unlockedWeapons(store.data));
   const cards=choices.map(id=>{
     if(id==='mastery'){
-      const c=run!.character,talent=CLASS_TALENTS[c.id];
-      return `<button class="card" data-action="take-mastery" style="--accent:${c.color}"><b class="rune">${ability(c.weapon).icon}</b><small>${c.name}专属</small><strong>${talent.name}</strong><span>${talent.description}</span></button>`;
+      const c=run!.path,talent=c.talent;
+      return `<button class="card" data-action="take-mastery" style="--accent:${ability(c.weapon).color}"><b class="rune">${ability(c.weapon).icon}</b><small>${c.name}专属</small><strong>${talent.name}</strong><span>${talent.description}</span></button>`;
     }
     const a=ability(id), level=run!.build[id]??0;
     const synergy=SYNERGIES.find(s=>(s.a===id&&run!.build[s.b])||(s.b===id&&run!.build[s.a]));
-    return `<button class="card" data-action="take-${id}" style="--accent:${a.color}"><b class="rune">${a.icon}</b><small>${level?'等级 '+level+' → '+(level+1):'习得'+(a.kind==='weapon'?'魔法':'祝福')}</small><strong>${a.name}</strong><span>${a.description}</span>${synergy?`<em>${synergy.name}</em>`:''}</button>`;
+    return `<button class="card" data-action="take-${id}" style="--accent:${a.color}"><b class="rune">${a.icon}</b><small>${level?'等级 '+level+' → '+(level+1):'习得'+(a.kind==='weapon'?'武技':'祝福')}</small><strong>${a.name}</strong><span>${a.description}</span>${synergy?`<em>${synergy.name}</em>`:''}</button>`;
   }).join('');
   const awakened=run.level-run.pendingLevels+1===MASTERY_LEVEL;
-  const specialty=MASTERIES[run.character.id];
+  const specialty=run.path.mastery;
   const notice=awakened?`<p class="mastery-notice">专精已开启 · <b>${specialty.name}</b>　${specialty.tip}</p>`:'';
   sheet('选择一项祝福',`${notice}<div class="cards">${cards||action('take-heal','恢复 20 生命',true)}</div>`,'');
 }
@@ -112,11 +127,11 @@ function end(){
   run.ended=true;scene.setPaused(true);audio.paused=false;audio.play(run.won?'win':'lose');
   const gained=finishRun(store.data,run.summary());store.write();page='result';
   const leading=Object.entries(run.damageByWeapon).sort((a,b)=>b[1]-a[1])[0];
-  const tactics='点亮林灯 '+run.shrinesLit+' 座　·　成功闪避 '+run.dodges+' 次'+(leading?'　·　主力魔法 '+ability(leading[0] as UpgradeId).name:'');
-  lastSummary=`<p>${run.rules.label}　·　守夜 ${clock(run.seconds)}　·　击败 ${run.kills}　·　等级 ${run.level}</p><p>${tactics}</p><p>${ABILITIES.filter(a=>run!.build[a.id]).map(a=>a.name+' '+run!.build[a.id]).join('　')}</p>${gained.map(id=>`<p>✦ ${ACHIEVEMENTS.find(a=>a.id===id)!.name}</p>`).join('')}<small>${store.warning}</small>`;
+  const tactics='点亮林灯 '+run.shrinesLit+' 座　·　成功闪避 '+run.dodges+' 次'+(leading?'　·　主力技能 '+ability(leading[0] as UpgradeId).name:'');
+  lastSummary=`<p>${run.character.name} · ${JOBS[run.path.job].name} · ${run.path.name}　·　${run.rules.label}　·　守夜 ${clock(run.seconds)}　·　击败 ${run.kills}　·　等级 ${run.level}</p><p>${tactics}</p><p>${ABILITIES.filter(a=>run!.build[a.id]).map(a=>a.name+' '+run!.build[a.id]).join('　')}</p>${gained.map(id=>`<p>✦ ${ACHIEVEMENTS.find(a=>a.id===id)!.name}</p>`).join('')}<small>${store.warning}</small>`;
   hud.hidden=true;sheet(run.won?'黎明已至':'守夜结束',lastSummary,action('again','再来一局',true)+action('home','返回主菜单'));
 }
-let shownSkills='';
+let shownSkills='',shownBosses='';
 function updateHealth(s:Combat){
   el('health').textContent=`${s.character.name}　${Math.ceil(s.player.hp)} / ${s.player.maxHp}　 Lv.${s.level}`;
   el<HTMLMeterElement>('hp').value=s.player.hp/s.player.maxHp;
@@ -124,22 +139,28 @@ function updateHealth(s:Combat){
 function updateHud(s:Combat,stats:FrameStats) {
   battleHud.update(s);updateHealth(s);
   const mastery=el('mastery');
-  const status=!s.masteryActive?'':s.character.id==='hazel'?'游雷 · '+Math.floor(s.stormCharge*100)+'%':
-    s.character.id==='ash'?(s.dashCooldown<=0?'焰枪 · 就绪':'焰枪 · 冷却'):
+  const status=!s.masteryActive?'':s.pathId==='hazel'?'游雷 · '+Math.floor(s.stormCharge*100)+'%':
+    s.pathId==='ash'?(s.dashCooldown<=0?'焰枪 · 就绪':'焰枪 · 冷却'):
+    s.path.job!=='mage'?(s.counterReady?'反击就绪':s.path.mastery.name):
     (s.zones.some(z=>z.kind==='spore' && z.timer>=1 && !z.bloomed)?'根阵 · 可开花':'根阵 · 育孢');
   if(mastery.textContent!==status)mastery.textContent=status;
   el<HTMLMeterElement>('xp').value=s.xp/xpNeeded(s.level);
   el('clock').textContent=clock(s.seconds);el('perf').textContent=store.data.settings.showFps?`实际 ${Math.round(stats.current)||"—"} · 平均 ${Math.round(stats.average)||"—"} · 1% Low ${Math.round(stats.low)||"—"} FPS`:'';
   const skills=ABILITIES.filter(a=>s.build[a.id]).map(a=>`<i style="color:${a.color}" title="${a.name}">${a.icon} <small>${s.build[a.id]}</small></i>`).join('');
   if(skills!==shownSkills){el('skills').innerHTML=skills;shownSkills=skills;}
-  const boss=s.boss;el('boss').textContent=boss?`古树守卫${boss.phase?' · 狂怒':''}　${Math.ceil(100*boss.hp/boss.maxHp)}%`:'';
+  const bosses=s.enemies.filter(e=>isChief(e.kind)&&e.hp>0);
+  const bars=bosses.map(b=>`<label>${chiefName(b.kind)}${b.phase?' · 狂怒':''} <span>${Math.min(100,Math.ceil((b.hp/b.maxHp)*100))}%</span><meter min="0" max="${b.maxHp}" value="${b.hp}" aria-label="${chiefName(b.kind)}生命"></meter></label>`).join('');
+  if(bars!==shownBosses){el('boss').innerHTML=bars;shownBosses=bars;}
 }
 panel.onclick=e=>{
   const btn=(e.target as Element).closest<HTMLButtonElement>('button[data-action]');if(!btn||btn.disabled)return;
   const id=btn.dataset.action!;void audio.start().catch(()=>{});audio.play('click');
   if(id==='home')home();else if(id==='select'||id==='again'){home();select();}else if(id==='journal')journal();else if(id==='settings')settings();
   else if(id==='resume')resume();else if(id==='pause')pause();else if(id==='retreat')end();
-  else if(id.startsWith('play-'))start(id.slice(5) as CharacterId);
+  else if(page==='select'&&id.startsWith('play-'))chooseJob(id.slice(5) as CharacterId);
+  else if(page==='job'&&id.startsWith('job-'))choosePath(id.slice(4) as Job);
+  else if(page==='path'&&id==='back-job')chooseJob(chosenActor);
+  else if(page==='path'&&id.startsWith('path-')){const path=id.slice(5) as PathId;if(PATHS[path]?.job===chosenJob)start(chosenActor,path);}
   else if((id==='gift-flame'||id==='gift-spring')&&run&&page==='gift'){run.takeGift(id==='gift-flame'?'flame':'spring');afterChoice();}
   else if(id.startsWith('take-')&&run&&page==='upgrade'){run.resolveLevel(id==='take-heal'?undefined:id.slice(5) as UpgradeId|'mastery');afterChoice();}
   else if(id==='import')el('import').click();

@@ -82,3 +82,5 @@
 
 #mastery {color:#e8d69e;font-size:11px} #mastery:empty {display:none}
 .card .mastery-tip {display:block;margin-top:5px;color:#dccf9b;font-size:.85em}
+
+#boss {width:clamp(165px,25vw,300px);pointer-events:none} #boss label{display:block;font-size:13px} #boss label+label{margin-top:4px} #boss label span{float:right} #boss meter{display:block;width:100%;height:8px;accent-color:#da8c79} #boss:not(:empty)~#objective{top:auto;bottom:16%}

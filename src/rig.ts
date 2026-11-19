@@ -52,7 +52,7 @@ export class WitchRig {
     this.hurtLeft=.30;this.grimacing=true;this.faceFrame(this.view);
   }
 
-  constructor(scene: Phaser.Scene, palette: number) {
+  constructor(scene: Phaser.Scene, palette: number,private carriesStaff=true) {
     this.root = scene.add.container();
     const joint = (parent: Bone, x: number, y: number) => {
       const node = scene.add.container(x, y);
@@ -112,8 +112,8 @@ export class WitchRig {
     this.wandArm.x = view === 'right' ? -4.8 : view === 'front' ? -9.5 : 8.6;
     this.freeArm.x = side ? -this.wandArm.x : rear ? -10.5 : 10.5;
     if(rear)this.wandArm.x=10;
-    this.sideGrip.visible=side;
-    this.shaft.visible=this.fingers.visible=!side;
+    this.sideGrip.visible=side && this.carriesStaff;
+    this.shaft.visible=!side && this.carriesStaff;this.fingers.visible=!side || !this.carriesStaff;
     this.shaftProjection=1;
     this.upperSleeve.scaleY=this.lowerSleeve.scaleY=.25;
     this.wandElbow.y=this.wand.y=ARM_LENGTH;

@@ -46,7 +46,7 @@ export class BattleHud {
         ? '正在点灯　'+Math.min(100,Math.floor(100*shrine.charge/RITUAL_TIME))+'%'
         : arrow+' 林灯　'+Math.round(distance/10)+' 步　·　'+Math.ceil(shrine.expires-s.seconds)+'s';
     }else if(s.flameTime>0)this.task.textContent='借火　'+Math.ceil(s.flameTime)+'s';
-    else if(s.seconds<6)this.task.textContent='拾取金色种荚升级　·　六分钟迎战古树';
+    else if(s.seconds<6)this.task.textContent='拾取金色种荚升级　·　三分钟迎战小首领';
     else this.task.textContent='';
   }
 }

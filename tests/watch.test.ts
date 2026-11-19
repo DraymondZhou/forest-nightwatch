@@ -8,10 +8,10 @@ function practice(){
   return sim;
 }
 
-describe('wounds and leaf step',()=>{
+describe('wounds and dodges',()=>{
   it('emits the source of a real hit once through the recovery window',()=>{
     const sim=practice(),p=sim.player, start=p.hp;
-    sim.spawn('beetle',p.x+5,p.y);
+    sim.spawn('slime',p.x+5,p.y);
     sim.step(dt,idle);
     const wound=sim.effects.find(e=>e.kind==='wound')!;
     expect(wound.tx).toBeGreaterThan(p.x);
@@ -22,7 +22,7 @@ describe('wounds and leaf step',()=>{
   });
   it('locks the dash direction, awards one near miss, and rejects a second use on cooldown',()=>{
     const sim=practice(),p=sim.player,start=p.x;
-    sim.spawn('beetle',p.x+16,p.y);
+    sim.spawn('slime',p.x+16,p.y);
     sim.step(dt,{x:1,y:0,dash:true});
     expect(p.hp).toBe(p.maxHp);expect(sim.dodges).toBe(1);
     expect(sim.effects.some(e=>e.kind==='evade')).toBe(true);
@@ -67,7 +67,7 @@ describe('optional watch lamps',()=>{
   });
   it('resolves a lethal hit ahead of a nearly completed lamp',()=>{
     const sim=atLamp();sim.shrine!.charge=RITUAL_TIME-.001;sim.player.hp=1;
-    sim.spawn('beetle',sim.player.x,sim.player.y);sim.step(dt,idle);
+    sim.spawn('slime',sim.player.x,sim.player.y);sim.step(dt,idle);
     expect(sim.ended).toBe(true);expect(sim.giftPending).toBe(false);
   });
 });
