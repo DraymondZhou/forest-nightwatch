@@ -1,12 +1,14 @@
 # 森光守夜 · Forest Nightwatch
 
-**当前版本：v1.10.1 · 全身职业卡与猎手移动**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.10.1) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.10.1/Forest-Nightwatch-v1.10.1.html)
+**当前版本：v1.11.0 · 敌潮成长与职业武技**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.11.0) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.11.0/Forest-Nightwatch-v1.11.0.html)
 
 《森光守夜》是一款支持手机横屏和电脑浏览器的森林生存肉鸽。先选职业，再选流派：法师靠雷电、孢子或余火控制战场；剑卫用盾反或重斩近身作战；猎手用穿杨或散射调整交战距离。
 
 每局第 3 分钟迎战棘冠山主或月绒蛾后，第 6 分钟迎战古树守卫。观察冲撞路线、挥砍扇面和蛾粉环带来闪避；同时在场的首领分别显示血条。
 
 普通怪有 12% 概率掉 1 金币；精英有 65% 概率掉 3 金币；小首领必掉 12 金币，最终首领必得 25 金币，随胜利自动结算。已拾取的金币在死亡或主动结束后保留。在主菜单的「营地训练」永久提升全职业的生命或移速，每项最多五级，局内祝福每局重新选择。
+
+新生成的小怪和精英随局内分钟数逐渐增加生命，已受伤的敌人不会在整分钟时回血。标准难度下，史莱姆开局为 22 生命，第 3 分钟约 56，第 6 分钟约 100。首领也使用独立的时间和难度倍率。猎手的燃矢、星镞会显示箭杆、尾羽和各自的命中效果；法师保留法术弹体，剑卫的霜锋、回旋刃使用盾波和旋刀。
 
 ## 开发
 

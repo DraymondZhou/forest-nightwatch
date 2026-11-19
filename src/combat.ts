@@ -4,7 +4,7 @@ import { MASTERY_LEVEL, ABILITIES, type UpgradeId, type WeaponId } from './conte
 import { upgradeChoices, Random, xpNeeded, activeSynergies, type Build, type RunSummary } from './model';
 
 
-import { DIFFICULTIES,rampDifficulty,type Difficulty } from './difficulty';
+import { enemyHealthScale,DIFFICULTIES,rampDifficulty,type Difficulty } from './difficulty';
 import { ATTACK_POSE_TIME } from './enemyPose';
 
 export type EnemyKind='slime'|'moth'|'twig'|'spitter'|'beetle'|'brute'|'crystal'|'boss'|'boar'|'mothQueen';
@@ -109,8 +109,7 @@ export class Combat {
     if(this.enemies.length>=150&&!isChief(kind))return;
     const angle=this.rng.between(0,Math.PI*2);const radius=this.seconds<15?this.rng.between(120,220):this.rng.between(330,500);
     const [baseHp,speed,size,attack]=ENEMY_STATS[kind];// Moths remain fragile. A late sturdy enemy should survive even an upgraded opening volley.
-    const growthSeconds=kind==='moth'?300:kind==='slime'||kind==='beetle'?140:165;
-    const scale=isChief(kind)?this.rules.bossHealth:1+this.seconds/growthSeconds;
+    const scale=enemyHealthScale(kind,this.seconds,this.difficulty);
     const enemy:Enemy={id:this.nextId(),kind,x:x??this.player.x+Math.cos(angle)*radius,y:y??this.player.y+Math.sin(angle)*radius,hp:baseHp*scale,maxHp:baseHp*scale,radius:size,speed:speed*rampDifficulty(this.rules.speed,this.seconds),attack:Math.round(attack*rampDifficulty(this.rules.damage,this.seconds)),phase:0,clock:this.rng.between(1,3),slow:0,frozen:0,rooted:0,burn:0,burnClock:0,spore:0,proc:0,flash:0,hitAngle:0,gait:0,attackPose:0};
     this.enemies.push(enemy);return enemy;
   }
@@ -317,7 +316,7 @@ export class Combat {
     }
     if(this.seconds>=360&&!this.bossSpawned){this.bossSpawned=true;this.spawn('boss');this.effect({kind:'level',x:p.x,y:p.y,text:'古树守卫苏醒了'});}
     this.spawnClock-=dt;this.eliteClock-=dt;
-    if(this.spawnClock<=0){this.spawnClock=Math.max(0.22,0.85-this.seconds/580)*(this.bossSpawned?1.8:1)/rampDifficulty(this.rules.waveRate,this.seconds);const pool:EnemyKind[]=this.seconds<40?['slime','moth']:this.seconds<100?['slime','moth','twig']:['slime','moth','twig','spitter','beetle'];this.spawn(this.rng.pick(pool));}
+    if(this.spawnClock<=0){this.spawnClock=Math.max(0.22,0.85-this.seconds/580)*(this.bossSpawned?2.65:1)/rampDifficulty(this.rules.waveRate,this.seconds);const pool:EnemyKind[]=this.seconds<40?['slime','moth']:this.seconds<100?['slime','moth','twig']:['slime','moth','twig','spitter','beetle'];this.spawn(this.rng.pick(pool));}
     if(this.eliteClock<=0&&this.seconds<350){this.spawn(this.rng.next()>.5?'brute':'crystal');this.eliteClock=55/rampDifficulty(55/this.rules.eliteInterval,this.seconds);}
     for(const e of this.enemies){
       if(e.hp<=0)continue;e.rooted=Math.max(0,e.rooted-dt);e.frozen=Math.max(0,e.frozen-dt);if(e.frozen===0)e.clock-=dt;e.slow=Math.max(0,e.slow-dt);e.proc=Math.max(0,e.proc-dt);e.flash=Math.max(0,e.flash-dt);e.spore=Math.max(0,e.spore-dt);

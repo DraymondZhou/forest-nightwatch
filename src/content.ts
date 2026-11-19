@@ -1,3 +1,4 @@
+import type {Job} from './stylesOfPlay';
 export type WeaponId = 'spark' | 'spore' | 'leaf' | 'ember' | 'frost' | 'comet' | 'blade' | 'bow';
 export type PassiveId = 'power' | 'haste' | 'reach' | 'vigor' | 'stride' | 'fortune';
 export type UpgradeId = WeaponId | PassiveId;
@@ -46,4 +47,15 @@ export const ACHIEVEMENTS = [
   {id:'dawn',name:'长夜将尽',description:'首次击败森林首领',reward:'黎明纪念章'},
   {id:'master',name:'守夜人',description:'三个职业各胜利一次',reward:'守夜人纪念徽章'}
 ] as const;
-export const ability = (id: UpgradeId) => ABILITIES.find(a=>a.id===id)!;
+const presentation:Partial<Record<Job,Partial<Record<WeaponId,Pick<Ability,'name'|'description'|'icon'>>>>>={
+  hunter:{
+    ember:{name:'燃矢',icon:'➶',description:'射出燃烧的箭矢，命中时炸开火星。直击灼烧 3 秒，附近敌人灼烧 1.5 秒。'},
+    comet:{name:'星镞',icon:'➴',description:'以星光箭镞贯穿一列敌人，射程比燃矢更远。'}
+  },
+  warden:{
+    leaf:{name:'回旋刃',icon:'⟲',description:'回旋的刃锋切割近身敌人，守住剑卫周身。'},
+    frost:{name:'霜锋',icon:'❄',description:'扫出一圈霜锋，使附近敌人减速，重复命中可冻结。'}
+  }
+};
+const byJob=Object.fromEntries((['mage','hunter','warden'] as const).map(job=>[job,Object.fromEntries(ABILITIES.map(a=>[a.id,{...a,...presentation[job]?.[a.id as WeaponId]}]))])) as Record<Job,Record<UpgradeId,Ability>>;
+export const ability=(id:UpgradeId,job:Job='mage')=>byJob[job][id];

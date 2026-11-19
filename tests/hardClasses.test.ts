@@ -21,6 +21,21 @@ function play(character:CharacterId,seed:number,path:PathId=character){
       const urgency=Math.max(0,1-(h-e.radius)/70)*(melee && e===boss ? 0 : 1.8);
       dx+=ax*urgency/h;dy+=ay*urgency/h;danger ||= h<e.radius+17;
     }
+    // Follow visible windups as a player would: sidestep lanes and use the closer edge of a ring.
+    for(const z of s.zones){
+    if(z.kind!=='warning'||z.life>.50)continue;
+    const ax=s.player.x-z.x,ay=s.player.y-z.y,h=Math.hypot(ax,ay)||.01;
+    let mx=ax/h,my=ay/h,safeDistance=z.radius-h;
+    if(z.shape==='ring'){const inner=z.radius*.54;if(h<inner||h>z.radius)continue;
+      if(h-inner<safeDistance){safeDistance=h-inner;mx=-mx;my=-my;}}
+    else if(z.shape==='lane'){const ux=Math.cos(z.angle??0),uy=Math.sin(z.angle??0),along=ux*ax+uy*ay,side=-uy*ax+ux*ay;
+      if(along<0||along>z.radius||Math.abs(side)>20)continue;
+      safeDistance=20-Math.abs(side);mx=-uy*Math.sign(side||1);my=ux*Math.sign(side||1);}
+    else if(z.shape==='cleave'&&ax*Math.cos(z.angle??0)+ay*Math.sin(z.angle??0)<h*Math.cos(.85))continue;
+    if(safeDistance<0)continue;
+    if(h<1&&z.shape!=='lane'){mx=1;my=0;}
+    dx=3*mx;dy=3*my;danger= safeDistance+9>z.life*s.walkSpeed;break;
+  }
     s.step(1/60,{x:dx,y:dy,dash:danger&&s.dashCooldown<=0});
     if(s.giftPending)s.takeGift(s.player.hp<s.player.maxHp*.7?'spring':'flame');
     while(s.pendingLevels){

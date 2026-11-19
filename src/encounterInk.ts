@@ -144,3 +144,20 @@ export function drawEquipment(g:Ink,x:number,y:number,dir:number,job:'warden'|'h
   }
   g.restore();
 }
+
+/** Segmented steel bevels cover the radius of the shield pulse. */
+export function drawShieldWave(g:Ink,x:number,y:number,r:number,alpha:number){
+  g.save();g.translateCanvas(x,y);
+  for(let sector=0;sector<3;sector++){
+    const a=sector*2.094+.4;
+    for(let i=0;i<5;i++){
+      const t=a+i*.29,u=t+.29;
+      const c=Math.cos(t),s=Math.sin(t),b=Math.cos(u),d=Math.sin(u);
+      const inner=r-2-5*Math.sin(Math.PI*(i+1)/6);
+      g.fillStyle(i<2?0xa1cbcc:0xd8e6cc,alpha*(.45+i*.09));
+      g.fillTriangle(c*r,s*r,b*r,d*r,b*inner,d*inner);
+      g.fillTriangle(c*r,s*r,b*inner,d*inner,c*inner,s*inner);
+    }
+  }
+  g.restore();
+}

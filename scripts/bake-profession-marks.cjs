@@ -1,0 +1,14 @@
+/* Profession marks in travel coordinates: point faces right. Warm linen
+   fletching stays distinct from the blazing or mineral tip at gameplay scale. */
+const sharp=require('sharp'),path=require('node:path');
+const ink='#28352f',p=(d,c,w=1.7)=>'<path d="'+d+'" fill="'+c+'" stroke="'+(w?ink:'none')+'" stroke-width="'+w+'" stroke-linejoin="round"/>';
+const s=(d,c,w=1.3)=>'<path d="'+d+'" fill="none" stroke="'+c+'" stroke-width="'+w+'" stroke-linecap="round"/>';
+const shaft=p('M19 30L78 29 84 31 81 33 19 34 14 33Z','#c7995f')+s('M24 31.7L77 30.9','#f0d294')+p('M38 31L13 18 17 25 12 23 19 30 15 29 24 33Z','#c2ba89')+p('M36 33L13 45 17 39 11 41 19 34 16 35 23 32Z','#94a889')+s('M16 22L28 29M16 41L26 35','#e6d9a7')+s('M40 30v4M43 30v3','#655641',2);
+const flame=p('M101 31Q93 35 88 40Q88 36 78 38Q70 41 59 43Q66 38 70 36Q58 37 50 30Q60 32 66 30Q59 28 53 20Q63 26 71 24Q67 20 65 17Q78 21 87 24Q94 25 101 31Z','#d67d44',.85)+p('M96 31L83 35 71 36 77 32 66 29 81 30 77 25 89 28Z','#ffcb70',0);
+const fire=shaft+flame+p('M75 31L79 27 85 29 98 31 84 34 77 35Z','#d69e65')+s('M82 31L94 31','#ffedac',1.8)+s('M72 28l2 7m1 -8l2 7','#9f5038',2)+p('M59 18l-9 -5 4 5Z','#fab278',0)+p('M67 42l-7 5 2 -4Z','#fa9758',0);
+const star=shaft+p('M68 31L77 25 78 28 84 20 90 28 105 30 91 34 86 41 83 36 76 37Z','#869ba7')+p('M78 31L85 23 88 30 103 30 88 33 86 38 84 32Z','#d6e8da',0)+s('M67 30l3 4m2 -5l3 4','#e0c28c',1.8)+s('M55 24l9 -1M49 39l8 -1','#9ab9c9')+p('M61 21l2 -4 1 3 4 1 -4 1 -1 3 -1 -3Z','#e7dbab',0);
+const knife=p('M26 43Q52 48 89 14Q87 31 73 41Q56 54 33 49L28 52 23 47Z','#93ad97')+p('M34 46Q61 45 86 20Q72 39 58 44L43 49Z','#d9deba',0)+s('M28 45Q37 37 47 37L44 42','#939a64',2)+p('M25 42q-8 -5 -12 -2l9 7 -10 4 15 -2 5 -5Z','#7b8b58')+s('M29 44l8 -4','#c8b578',2);
+const shards=p('M50 35L30 18 53 26 62 33Z','#91b6c2')+p('M60 30L57 9 66 23 67 33Z','#c4dfd9')+p('M69 33L84 15 80 30 74 35Z','#a3c6c8')+p('M72 38L91 36 81 42Z','#dbe4c9')+s('M38 22l17 10M58 15l7 16','#e9ecd4');
+const spark=p('M62 33L34 27 51 26 40 12 61 24 60 11 68 25 86 17 74 30 99 32 77 36 84 47 69 39 62 53 61 40 48 44 55 36Z','#d78a4e',0)+p('M61 29l-9 -7 12 5 2 -8 4 10 14 -2 -9 6 8 3 -12 -1 -5 8 1 -8 -12 1Z','#ffe7a2',0);
+const flash=p('M48 37L72 26 84 15 80 28 101 28 81 34 87 41 73 37 61 47 64 38Z','#b7d6d6',0)+s('M20 42l26 -8M45 47l10 -5M84 23l15 -8','#d6dbc1',2);
+(async()=>{const shapes=[fire,star,knife,shards,spark,flash];const layers=shapes.map((body,index)=>({left:index*128,top:32,input:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="64">'+body+'</svg>')}));await sharp({create:{width:layers.length*128,height:128,channels:4,background:'#00000000'}}).composite(layers).png({palette:true,colours:192}).toFile(path.join(__dirname,'../public/art/profession-marks.png'));})().catch(err=>{console.error(err);process.exitCode=1});

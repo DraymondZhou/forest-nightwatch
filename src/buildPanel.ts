@@ -20,7 +20,7 @@ function abilityEntry(run:Combat, a:Ability) {
 }
 
 export function buildPanel(run:Combat,time:string) {
-  const owned=ABILITIES.filter(a=>(run.build[a.id]??0)>0);
+  const owned=ABILITIES.filter(a=>(run.build[a.id]??0)>0).map(a=>ability(a.id,run.path.job));
   const group=(kind:Ability['kind'])=>owned.filter(a=>a.kind===kind).map(a=>abilityEntry(run,a)).join('');
   const stats=[
     ['生命',Math.ceil(run.player.hp)+' / '+run.player.maxHp],
@@ -35,7 +35,7 @@ export function buildPanel(run:Combat,time:string) {
     ['经验获取倍率',multiplier(run.xpMultiplier)]
   ];
   const links=activeSynergies(run.build).map(s=>`<div class="build-link"><b>${s.name}</b>
-    <small>${ability(s.a).name} ＋ ${ability(s.b).name}</small><p>${s.description}</p></div>`).join('');
+    <small>${ability(s.a,run.path.job).name} ＋ ${ability(s.b,run.path.job).name}</small><p>${s.description}</p></div>`).join('');
   const gifts=run.flameTime>0?`<p class="flame-note">借火　伤害 +30% · 剩余 ${Math.ceil(run.flameTime)} 秒</p>`:'';
   return `<div class="run-readout"><strong>${JOBS[run.path.job].name} · ${run.path.name}</strong><span>${run.rules.label}难度</span><span>等级 ${run.level}</span>
     <span>击败 ${run.kills}</span><time>${time}</time></div>

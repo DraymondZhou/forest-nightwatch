@@ -64,8 +64,9 @@ function camp(){
 }
 function journal() {
   page='journal';
+  const bookName=(id:UpgradeId,other:UpgradeId)=>ability(id,other==='bow'?'hunter':other==='blade'?'warden':'mage').name;
   const rows=ACHIEVEMENTS.map(a=>`<li><b>${store.data.achievements.includes(a.id)?'✦':'◇'}　${a.name}</b><span>${a.description} · ${a.reward}</span></li>`).join('');
-  sheet('守夜手记',`<p>共守夜 ${store.data.runs} 次　·　累计击败 ${store.data.kills}　·　最长 ${clock(store.data.bestTime)}</p><ul>${rows}</ul><h3>技能联动</h3><ul>${SYNERGIES.map(s=>`<li><b>${s.name}</b><span>${ability(s.a).name} + ${ability(s.b).name}　${s.description}</span></li>`).join('')}</ul>`,action('home','返回'));
+  sheet('守夜手记',`<p>共守夜 ${store.data.runs} 次　·　累计击败 ${store.data.kills}　·　最长 ${clock(store.data.bestTime)}</p><ul>${rows}</ul><h3>技能联动</h3><ul>${SYNERGIES.map(s=>`<li><b>${s.name}</b><span>${bookName(s.a,s.b)} + ${bookName(s.b,s.a)}　${s.description}</span></li>`).join('')}</ul>`,action('home','返回'));
 }
 function settings() {
   page='settings';const s=store.data.settings;
@@ -116,7 +117,7 @@ function upgrade(){
       const c=run!.path,talent=c.talent;
       return `<button class="card" data-action="take-mastery" style="--accent:${ability(c.weapon).color}"><b class="rune">${ability(c.weapon).icon}</b><small>${c.name}专属</small><strong>${talent.name}</strong><span>${talent.description}</span></button>`;
     }
-    const a=ability(id), level=run!.build[id]??0;
+    const a=ability(id,run!.path.job), level=run!.build[id]??0;
     const synergy=SYNERGIES.find(s=>(s.a===id&&run!.build[s.b])||(s.b===id&&run!.build[s.a]));
     return `<button class="card" data-action="take-${id}" style="--accent:${a.color}"><b class="rune">${a.icon}</b><small>${level?'等级 '+level+' → '+(level+1):'习得'+(a.kind==='weapon'?'武技':'祝福')}</small><strong>${a.name}</strong><span>${a.description}</span>${synergy?`<em>${synergy.name}</em>`:''}</button>`;
   }).join('');
@@ -130,8 +131,8 @@ function end(){
   run.ended=true;scene.setPaused(true);audio.paused=false;audio.play(run.won?'win':'lose');
   bankCoins();const gained=finishRun(store.data,run.summary());store.write();page='result';
   const leading=Object.entries(run.damageByWeapon).sort((a,b)=>b[1]-a[1])[0];
-  const tactics='点亮林灯 '+run.shrinesLit+' 座　·　成功闪避 '+run.dodges+' 次'+(leading?'　·　主力技能 '+ability(leading[0] as UpgradeId).name:'');
-  lastSummary=`<p>${JOBS[run.path.job].name} · ${run.path.name}　·　${run.rules.label}　·　守夜 ${clock(run.seconds)}　·　击败 ${run.kills}　·　等级 ${run.level}</p><p>本局金币 +${run.coins}　·　营地余额 ${store.data.gold}</p><p>${tactics}</p><p>${ABILITIES.filter(a=>run!.build[a.id]).map(a=>a.name+' '+run!.build[a.id]).join('　')}</p>${gained.map(id=>`<p>✦ ${ACHIEVEMENTS.find(a=>a.id===id)!.name}</p>`).join('')}<small>${store.warning}</small>`;
+  const tactics='点亮林灯 '+run.shrinesLit+' 座　·　成功闪避 '+run.dodges+' 次'+(leading?'　·　主力技能 '+ability(leading[0] as UpgradeId,run.path.job).name:'');
+  lastSummary=`<p>${JOBS[run.path.job].name} · ${run.path.name}　·　${run.rules.label}　·　守夜 ${clock(run.seconds)}　·　击败 ${run.kills}　·　等级 ${run.level}</p><p>本局金币 +${run.coins}　·　营地余额 ${store.data.gold}</p><p>${tactics}</p><p>${ABILITIES.filter(a=>run!.build[a.id]).map(a=>ability(a.id,run!.path.job).name+' '+run!.build[a.id]).join('　')}</p>${gained.map(id=>`<p>✦ ${ACHIEVEMENTS.find(a=>a.id===id)!.name}</p>`).join('')}<small>${store.warning}</small>`;
   hud.hidden=true;sheet(run.won?'黎明已至':'守夜结束',lastSummary,action('again','再来一局',true)+action('camp','营地训练')+action('home','返回主菜单'));
 }
 let shownSkills='',shownBosses='';
@@ -150,7 +151,7 @@ function updateHud(s:Combat,stats:FrameStats) {
   if(mastery.textContent!==status)mastery.textContent=status;
   el<HTMLMeterElement>('xp').value=s.xp/xpNeeded(s.level);
   el('clock').textContent=clock(s.seconds);el('perf').textContent=store.data.settings.showFps?`实际 ${Math.round(stats.current)||"—"} · 平均 ${Math.round(stats.average)||"—"} · 1% Low ${Math.round(stats.low)||"—"} FPS`:'';
-  const skills=ABILITIES.filter(a=>s.build[a.id]).map(a=>`<i style="color:${a.color}" title="${a.name}">${a.icon} <small>${s.build[a.id]}</small></i>`).join('');
+  const skills=ABILITIES.filter(a=>s.build[a.id]).map(a=>ability(a.id,s.path.job)).map(a=>`<i style="color:${a.color}" title="${a.name}">${a.icon} <small>${s.build[a.id]}</small></i>`).join('');
   if(skills!==shownSkills){el('skills').innerHTML=skills;shownSkills=skills;}
   const bosses=s.enemies.filter(e=>isChief(e.kind)&&e.hp>0);
   const bars=bosses.map(b=>`<label>${chiefName(b.kind)}${b.phase?' · 狂怒':''} <span>${Math.min(100,Math.ceil((b.hp/b.maxHp)*100))}%</span><meter min="0" max="${b.maxHp}" value="${b.hp}" aria-label="${chiefName(b.kind)}生命"></meter></label>`).join('');
