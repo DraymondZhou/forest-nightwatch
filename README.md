@@ -1,6 +1,10 @@
 # 森光守夜 · Forest Nightwatch
 
-手机和电脑浏览器横屏生存游戏。手绘森林、组合魔法、角色解锁与本地存档。
+**当前版本：v1.9.0 · 职业与首领战**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.9.0) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.9.0/Forest-Nightwatch-v1.9.0.html)
+
+《森光守夜》是一款支持手机横屏和电脑浏览器的森林生存肉鸽。先选角色，再定职业和流派：法师靠雷电、孢子或余火控制战场；剑卫用盾反或重斩近身作战；猎手用穿杨或散射调整交战距离。
+
+每局第 3 分钟迎战棘冠山主或月绒蛾后，第 6 分钟迎战古树守卫。观察冲撞路线、挥砍扇面和蛾粉环带来闪避；同时在场的首领分别显示血条。
 
 ## 开发
 
@@ -42,6 +46,6 @@ npm run build
 
 安装 Node.js 的 Windows 电脑可双击「手机同网试玩.cmd」。保持窗口开启，在同一 Wi-Fi 的手机 Safari 输入窗口列出的 WLAN 完整链接。每次启动会生成新地址，关闭窗口即停止服务。访客网络、设备间隔离及防火墙可能阻止同网访问。
 
-v1.1 使用无缝草地、按世界坐标布置的装饰和无边界战斗。图块实现参考 Phaser 官方 TileSprite 指南：https://phaser.io/oss/docs/phaser/concepts/gameobjects/tile-sprite
+地图使用可重复拼接的草地图块；装饰按世界坐标布置，角色可以向任意方向持续移动。图块实现参考 Phaser 官方 TileSprite 指南：https://phaser.io/oss/docs/phaser/concepts/gameobjects/tile-sprite
 
 怪物骨架、关节与动作曲线在 `scripts/enemy-skeletons.cjs`。如需修改，在可加载 sharp 的 Node 环境运行 `node scripts/bake-enemies.cjs` 重建图集。正常开发和游玩直接使用已提交图集。
