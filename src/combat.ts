@@ -4,11 +4,11 @@ import { MASTERY_LEVEL, ABILITIES, type UpgradeId, type WeaponId } from './conte
 import { upgradeChoices, Random, xpNeeded, activeSynergies, type Build, type RunSummary } from './model';
 
 
-import { enemyHealthScale,DIFFICULTIES,rampDifficulty,type Difficulty } from './difficulty';
+import { enemyHealthScale,latePressure,DIFFICULTIES,rampDifficulty,type Difficulty } from './difficulty';
 import { ATTACK_POSE_TIME } from './enemyPose';
 
 export type EnemyKind='slime'|'moth'|'twig'|'spitter'|'beetle'|'brute'|'crystal'|'boss'|'boar'|'mothQueen';
-export interface Enemy {id:number;kind:EnemyKind;x:number;y:number;hp:number;maxHp:number;radius:number;speed:number;attack:number;phase:number;clock:number;slow:number;frozen:number;rooted:number;burn:number;burnClock:number;spore:number;proc:number;flash:number;hitAngle:number;gait:number;attackPose:number; charge?:{angle:number;remaining:number}; preparing?:number; windupTime?:number; attackHeading?:number; pattern?:number}
+export interface Enemy {id:number;kind:EnemyKind;x:number;y:number;hp:number;maxHp:number;radius:number;speed:number;attack:number;phase:number;clock:number;slow:number;frozen:number;rooted:number;burn:number;burnClock:number;spore:number;proc:number;flash:number;hitAngle:number;gait:number;attackPose:number; charge?:{angle:number;remaining:number}; preparing?:number; windupTime?:number; attackHeading?:number; pattern?:number; recovery?:number}
 export const isChief=(kind:EnemyKind)=>kind==='boss'||kind==='boar'||kind==='mothQueen';
 export const chiefName=(kind:EnemyKind)=>kind==='boar'?'棘冠山主':kind==='mothQueen'?'月绒蛾后':'古树守卫';
 export interface Shot {id:number;x:number;y:number;vx:number;vy:number;life:number;radius:number;damage:number;weapon:WeaponId|'enemy';pierce:number;lance?:boolean; missile?:'sap'|'shard'|'seed'|'dust'; aimed?:boolean;hit:Set<number>}
@@ -248,6 +248,7 @@ export class Combat {
     const inRadius=d<=z.radius;
     const hit=inRadius && (z.shape==='ring'?d>=z.radius*.54:z.shape==='cleave'?dx*Math.cos(angle)+dy*Math.sin(angle)>=d*Math.cos(.85):true);
     if(hit)this.hurt(z.damage,z.x,z.y);
+    if(owner?.kind==='boss' && z.shape==='disk')owner.recovery=1.15;
     this.effect({kind:'impactZone',x:z.x,y:z.y,radius:z.radius,tx:angle,shape:z.shape});
   }
   private enemyShot(e:Enemy,angle:number,speed=145){if(this.shots.length>=280)return;this.shots.push({id:this.nextId(),x:e.x,y:e.y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:5,radius:e.kind==='crystal'?5:e.kind==='spitter'?9:7,missile:e.kind==='spitter'?'sap':e.kind==='crystal'?'shard':e.kind==='mothQueen'?'dust':'seed',damage:e.attack,weapon:'enemy',pierce:1,hit:new Set()});}
@@ -316,7 +317,7 @@ export class Combat {
     }
     if(this.seconds>=360&&!this.bossSpawned){this.bossSpawned=true;this.spawn('boss');this.effect({kind:'level',x:p.x,y:p.y,text:'古树守卫苏醒了'});}
     this.spawnClock-=dt;this.eliteClock-=dt;
-    if(this.spawnClock<=0){this.spawnClock=Math.max(0.22,0.85-this.seconds/580)*(this.bossSpawned?2.65:1)/rampDifficulty(this.rules.waveRate,this.seconds);const pool:EnemyKind[]=this.seconds<40?['slime','moth']:this.seconds<100?['slime','moth','twig']:['slime','moth','twig','spitter','beetle'];this.spawn(this.rng.pick(pool));}
+    if(this.spawnClock<=0){this.spawnClock=Math.max(0.22,0.85-this.seconds/580)*(1+latePressure(this.seconds)*.39)*(this.bossSpawned?3.5:1)/rampDifficulty(this.rules.waveRate,this.seconds);const pool:EnemyKind[]=this.seconds<40?['slime','moth']:this.seconds<100?['slime','moth','twig']:['slime','moth','twig','spitter','beetle'];this.spawn(this.rng.pick(pool));}
     if(this.eliteClock<=0&&this.seconds<350){this.spawn(this.rng.next()>.5?'brute':'crystal');this.eliteClock=55/rampDifficulty(55/this.rules.eliteInterval,this.seconds);}
     for(const e of this.enemies){
       if(e.hp<=0)continue;e.rooted=Math.max(0,e.rooted-dt);e.frozen=Math.max(0,e.frozen-dt);if(e.frozen===0)e.clock-=dt;e.slow=Math.max(0,e.slow-dt);e.proc=Math.max(0,e.proc-dt);e.flash=Math.max(0,e.flash-dt);e.spore=Math.max(0,e.spore-dt);
@@ -336,21 +337,28 @@ export class Combat {
         if(e.charge.remaining<=0)e.charge=undefined;
         continue;
       }
+      if(e.recovery){e.recovery=Math.max(0,e.recovery-dt);speed=0;}
       if(e.preparing){e.preparing=Math.max(0,e.preparing-dt);speed=0;}
       if(e.kind==='twig'&&e.clock<0.6)speed*=1.8;
       if(e.kind==='mothQueen'&&dist<200)speed=0;
       if(e.kind==='spitter'&&dist<280)speed=0;
-      if(e.kind==='boss'&&e.hp<e.maxHp*.5){speed*=1.5;e.phase=1;}
+      if(e.kind==='boss'&&e.hp<e.maxHp*.5){
+        if(e.phase===0 && this.drops.length<320){
+          const angle=Math.atan2(dy,dx);
+          this.drops.push({id:this.nextId(),kind:'heal',x:e.x+90*Math.cos(angle),y:e.y+90*Math.sin(angle),born:this.seconds,value:28});
+        }
+        speed*=1.5;e.phase=1;
+      }
       if(e.frozen<=0){
         e.attackPose=Math.max(0,e.attackPose-dt);
         if(e.speed>0)e.gait+=dt*speed/e.speed;
       }
       e.x+=dx/dist*speed*dt;e.y+=dy/dist*speed*dt;
-      if(e.frozen<=0 && dist<e.radius+15 && e.kind!=='boar' && e.kind!=='brute' && e.kind!=='beetle' && e.kind!=='twig'){
+      if(!e.recovery && e.frozen<=0 && dist<e.radius+15 && e.kind!=='boar' && e.kind!=='brute' && e.kind!=='beetle' && e.kind!=='twig'){
         if(p.invincible<=0 && e.frozen<=0)e.attackPose=ATTACK_POSE_TIME;
         this.hurt(e.attack,e.x,e.y);
       }
-      if(e.frozen<=0 && e.clock<=0){
+      if(!e.recovery && e.frozen<=0 && e.clock<=0){
         e.clock=e.kind==='boss'?(e.phase?2.8:4)*this.rules.bossInterval:e.kind==='twig'?3.5:3;
         if(e.kind==='spitter'||e.kind==='crystal'||e.kind==='boss')e.attackPose=ATTACK_POSE_TIME;
         const aim=Math.atan2(dy,dx);
@@ -371,8 +379,11 @@ export class Combat {
           else {e.attackPose=ATTACK_POSE_TIME;for(const offset of [-.5,-.25,0,.25,.5])this.enemyShot(e,aim+offset,115);}
         }
         if(e.kind==='boss'){
-          const count=e.phase?12:8;for(let i=0;i<count;i++)this.enemyShot(e,i/count*Math.PI*2+this.seconds*.16,120);
-          this.warn(e,'disk',p.x,p.y,e.phase?115:89,0,1.3);
+          // Separate the two hazards in phase one. The enraged third beat combines them.
+          e.pattern=(e.pattern??0)+1;
+          const beat=e.phase?(e.pattern-1)%3:(e.pattern-1)%2;
+          if(beat!==0){const count=e.phase?12:8;for(let i=0;i<count;i++)this.enemyShot(e,i/count*Math.PI*2+this.seconds*.16,120);}
+          if(beat!==1)this.warn(e,'disk',p.x,p.y,e.phase?115:89,0,1.3);
         }
       }
     }
@@ -433,7 +444,7 @@ export class Combat {
     }
     this.shots=this.shots.filter(s=>s.life>0 && s.pierce>0);
     for(const e of this.enemies)if(e.hp<=0){
-      this.kills++;const elite=isChief(e.kind)||e.kind==='brute'||e.kind==='crystal';const value=elite?24:3;
+      this.kills++;const elite=isChief(e.kind)||e.kind==='brute'||e.kind==='crystal';const value=elite?24:this.seconds<180?3:this.seconds<300?4:5;
       // Merge overflow XP rather than dropping rewards when a player circles the arena.
       if(this.drops.length<300)this.drops.push({id:this.nextId(),x:e.x,y:e.y,born:this.seconds,value,kind:'xp'});else {const existing=this.drops.find(d=>d.kind==='xp');if(existing)existing.value+=value;}
       if(this.drops.length<320&&(elite||this.rng.next()<0.025))this.drops.push({id:this.nextId(),x:e.x+12,y:e.y,born:this.seconds,value:elite?22:12,kind:'heal'});

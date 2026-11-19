@@ -17,6 +17,19 @@ describe('forest encounters',()=>{
     const s=arena(),p=s.player,e=s.spawn('mothQueen',p.x-175,p.y)!;e.clock=0;ticks(s,1);expect(s.zones[0]?.shape).toBe('ring');
     p.y+=offset;ticks(s,68);expect(p.hp<p.maxHp).toBe(hits);
   });
+  it('separates the opening stomp from the volley and gives the player a punish window',()=>{
+    const s=arena(),p=s.player,e=s.spawn('boss',p.x-190,p.y)!;e.clock=0;ticks(s,1);
+    expect(s.zones[0]?.shape).toBe('disk');expect(s.shots).toHaveLength(0);
+    p.y+=160;ticks(s,80);expect(e.recovery).toBeGreaterThan(0);
+    p.x=e.x;p.y=e.y;ticks(s,5);expect(p.hp).toBe(p.maxHp);
+    ticks(s,80);expect(p.hp).toBeLessThan(p.maxHp);
+  });
+  it('sheds one collectible healing berry at half health even after further damage',()=>{
+    const s=arena(),p=s.player,e=s.spawn('boss',p.x-250,p.y)!;e.hp=e.maxHp*.49;
+    ticks(s,1);e.hp-=50;ticks(s,3);
+    const berries=s.drops.filter(d=>d.kind==='heal');expect(berries).toHaveLength(1);
+    p.hp=30;p.x=berries[0].x;p.y=berries[0].y;ticks(s,1);expect(p.hp).toBe(58);
+  });
   it('fires sap globules, crystal fans, moth dust and radial tree seeds',()=>{
     for(const [kind,missile,count] of [['spitter','sap',1],['crystal','shard',3],['mothQueen','dust',5],['boss','seed',8]] as const){
       const s=arena(),p=s.player,e=s.spawn(kind,p.x-190,p.y)!;e.clock=0;e.pattern=1;ticks(s,1);

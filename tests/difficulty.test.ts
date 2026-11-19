@@ -43,7 +43,7 @@ describe('difficulty and weapon growth',()=>{
       expect(wounded.hp).toBe(10);
     }
   });
-  for(const [seconds,level,power,expected] of [[0,1,0,[1,2,4]],[180,3,2,[1,2,5]],[360,5,4,[1,2,6]]] as const){
+  for(const [seconds,level,power,expected] of [[0,1,0,[1,2,4]],[180,3,2,[1,2,6]],[360,5,4,[2,4,11]]] as const){
     it('keeps distinct single-target breakpoints at '+seconds+' seconds',()=>{
       const hits=(['moth','slime','beetle'] as const).map(kind=>{
         const sim=arena(seconds,{spark:level,power});
@@ -55,11 +55,11 @@ describe('difficulty and weapon growth',()=>{
       expect(hits).toEqual(expected);
     });
   }
-  it('lets a ranked arc clear light targets while an armored neighbor survives the chain',()=>{
+  it('keeps a late moth alive through one ranked arc while armor resists the chain',()=>{
     const sim=arena(360,{spark:5,power:4,haste:4});
     const moth=target(sim,'moth',90),beetle=target(sim,'beetle',120);
     sim.step(1/60,{x:0,y:0});
-    expect(moth.hp).toBeLessThanOrEqual(0);expect(beetle.hp).toBeLessThan(beetle.maxHp);
+    expect(moth.hp).toBeGreaterThan(0);expect(moth.hp).toBeLessThan(moth.maxHp*.55);expect(beetle.hp).toBeLessThan(beetle.maxHp);
     expect(beetle.maxHp-beetle.hp).toBeCloseTo(15*1.94*1.4*.48);
     expect(sim.attackInterval('spark')).toBeCloseTo(.76);
   });

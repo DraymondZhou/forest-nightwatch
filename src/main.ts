@@ -154,7 +154,7 @@ function updateHud(s:Combat,stats:FrameStats) {
   const skills=ABILITIES.filter(a=>s.build[a.id]).map(a=>ability(a.id,s.path.job)).map(a=>`<i style="color:${a.color}" title="${a.name}">${a.icon} <small>${s.build[a.id]}</small></i>`).join('');
   if(skills!==shownSkills){el('skills').innerHTML=skills;shownSkills=skills;}
   const bosses=s.enemies.filter(e=>isChief(e.kind)&&e.hp>0);
-  const bars=bosses.map(b=>`<label>${chiefName(b.kind)}${b.phase?' · 狂怒':''} <span>${Math.min(100,Math.ceil((b.hp/b.maxHp)*100))}%</span><meter min="0" max="${b.maxHp}" value="${b.hp}" aria-label="${chiefName(b.kind)}生命"></meter></label>`).join('');
+  const bars=bosses.map(b=>`<label>${chiefName(b.kind)}${b.recovery?' · 收招':b.phase?' · 狂怒':''} <span>${Math.min(100,Math.ceil((b.hp/b.maxHp)*100))}%</span><meter min="0" max="${b.maxHp}" value="${b.hp}" aria-label="${chiefName(b.kind)}生命"></meter></label>`).join('');
   if(bars!==shownBosses){el('boss').innerHTML=bars;shownBosses=bars;}
 }
 panel.onclick=e=>{

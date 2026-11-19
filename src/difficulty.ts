@@ -13,6 +13,12 @@ export function rampDifficulty(target:number,seconds:number){
   return target<=1?target:1+(target-1)*progress;
 }
 
+// This curve belongs to the encounter clock, not the player's build. It reaches
+// its second knee after the mini-boss, when weapon ranks and synergies come online.
+export function latePressure(seconds:number){
+  const m=Math.min(8,Math.max(0,seconds/60));
+  return Math.max(0,m-1.5)*.15+Math.max(0,m-3)*.22+Math.max(0,m-5)*.10;
+}
 // Snapshot health at spawn: later waves get tougher without refilling existing health bars.
 export function enemyHealthScale(kind:string,seconds:number,difficulty:Difficulty){
   const minutes=Math.max(0,Math.min(8,seconds/60));
@@ -20,9 +26,12 @@ export function enemyHealthScale(kind:string,seconds:number,difficulty:Difficult
   if(kind==='boss'||kind==='boar'||kind==='mothQueen'){
     const final=kind==='boss';
     const weight=final ? .28+minutes*.045 : .60+minutes*.11;
-    return DIFFICULTIES[difficulty].bossHealth*(1+pace*weight);
+    const endurance=(final ? 1.82 : 1.80)-(difficulty==='easy' ? .45 : 0);
+    return DIFFICULTIES[difficulty].bossHealth*(1+pace*weight)*endurance;
   }
   const slope=kind==='moth'?.20:kind==='slime'||kind==='beetle'?60/140:60/165;
   // Swarm moths stay lighter than plated ground enemies at every minute.
-  return 1+minutes*slope*pace+minutes*minutes*(kind==='moth'?.009:.027)*pace;
+  const base=1+minutes*slope*pace+minutes*minutes*(kind==='moth'?.009:.027)*pace;
+  const role=(kind==='brute'||kind==='crystal') ? .43 : kind==='beetle' ? .68 : kind==='moth' ? .92 : 1;
+  return base*(1+latePressure(seconds)*role*(difficulty==='easy' ? .55 : 1));
 }
