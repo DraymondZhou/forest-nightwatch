@@ -1,7 +1,9 @@
+import type {AttackNote} from './attackNotes';
+import {RELICS,type RelicId} from './relics';
 import {freshRanks,maxHealth,walkSpeed,coinValue,type Ranks} from './camp';
 import {PATHS,type PathId} from './stylesOfPlay';
 import { MASTERY_LEVEL, ABILITIES, type UpgradeId, type WeaponId } from './content';
-import { upgradeChoices, Random, xpNeeded, activeSynergies, type Build, type RunSummary } from './model';
+import { upgradePool,upgradeChoices, Random, xpNeeded, activeSynergies, type Build, type RunSummary } from './model';
 
 
 import { enemyHealthScale,latePressure,DIFFICULTIES,rampDifficulty,type Difficulty } from './difficulty';
@@ -36,6 +38,11 @@ export class Combat {
   dashCooldown=0; dashTime=0; dashAngle=0; dodges=0; shrinesLit=0;
   shrine?:Shrine; giftPending=false; flameTime=0;
   miniSpawned=false; counterReady=false; swings=0; weaponAngle=0; weaponMotion=0;
+  relicPending=false;relic?:RelicId;rerolls=1;focus=0;
+  takeRelic(id:RelicId){
+    if(!this.relicPending||this.ended||this.relic||RELICS[id]?.job!==this.path.job)return false;
+    this.relic=id;this.relicPending=false;return true;
+  }
   get path(){return PATHS[this.pathId];}
   stormCharge=0;
   classTalent=false;
@@ -43,8 +50,16 @@ export class Combat {
     const choiceLevel=this.level-this.pendingLevels+1;
     return this.pendingLevels>0 && !this.classTalent && choiceLevel>=9 && choiceLevel%3===0;
   }
-  levelOptions(unlocked:string[]):(UpgradeId|'mastery')[]{
-    const ordinary=upgradeChoices(this.build,this.path.job==='mage'?unlocked:unlocked.filter(id=>(this.path.job==='warden'?['leaf','frost']:['ember','comet']).includes(id)),this.rng);
+  private deck(unlocked:string[]){return this.path.job==='mage'?unlocked:unlocked.filter(id=>(this.path.job==='warden'?['leaf','frost']:['ember','comet']).includes(id));}
+  canReroll(unlocked:string[],old:readonly string[]){return this.pendingLevels>0 && this.rerolls>0 && upgradePool(this.build,this.deck(unlocked)).some(a=>!old.includes(a.id));}
+  reroll(unlocked:string[],old:readonly (UpgradeId|'mastery')[]){
+    if(!this.canReroll(unlocked,old))return;
+    this.rerolls--;const fresh=this.levelOptions(unlocked,old);
+    // Near an exhausted pool, keep enough previous cards to preserve the choice count.
+    return [...fresh,...old.filter(id=>!fresh.includes(id))].slice(0,old.length);
+  }
+  levelOptions(unlocked:string[],omit:readonly string[]=[]):(UpgradeId|'mastery')[]{
+    const ordinary=upgradeChoices(this.build,this.deck(unlocked),this.rng,omit);
     return this.offersClassTalent?['mastery',...ordinary.slice(0,2)]:ordinary;
   }
   get masteryActive(){return this.level>=MASTERY_LEVEL;}
@@ -59,10 +74,11 @@ export class Combat {
     this.gridHeads.fill(-1);
     this.player.hp=this.player.maxHp=maxHealth(training);this.build[this.path.weapon]=1;
   }
+  fatal?:{kind:AttackNote;damage:number};
   get rules(){return DIFFICULTIES[this.difficulty];}
   get pickupRadius(){return (98+(this.build.reach??0)*12)*1.2+(this.harvestTime>0?145:0);}
   get boss() {return this.enemies.find(e=>e.kind==='boss')??this.enemies.find(e=>isChief(e.kind));}
-  get power() {return (1+(this.build.power??0)*0.10)*(this.flameTime>0?1.30:1);}
+  get power() {return (1+(this.build.power??0)*0.10)*(this.flameTime>0?1.30:1)*(this.relic==='stillglass'&&this.focus>=1?1.25:1);}
   get reach() {return 1+(this.build.reach??0)*0.1;}
   get haste() {return CAST_INTERVAL[this.build.haste??0];}
   get walkSpeed(){return walkSpeed(this.training)*(1+(this.build.stride??0)*.08);}
@@ -114,7 +130,7 @@ export class Combat {
     this.enemies.push(enemy);return enemy;
   }
   private effect(effect:Effect){if(this.effects.length<100)this.effects.push(effect);}
-  private hurt(amount:number,sourceX:number,sourceY:number) {
+  private hurt(amount:number,sourceX:number,sourceY:number,kind:AttackNote='contact') {
     if(this.evadeWindow>0 && this.player.invincible<=0 && !this.ended){
       if(this.harvestTime<=0){
         this.dodges++;this.harvestTime=.75;
@@ -129,7 +145,7 @@ export class Combat {
     if(this.effects.length>=100)this.effects.pop();
     this.effects.push({kind:'wound',x:this.player.x,y:this.player.y,tx:sourceX,ty:sourceY,
       color:0xf19a8a,radius:amount,text:'−'+Math.round(amount)});
-    if(this.player.hp<=0)this.ended=true;
+    if(this.player.hp<=0){this.fatal={kind,damage:amount};this.ended=true;}
   }
   private hit(e:Enemy,damage:number,weapon:WeaponId,secondary=false,fromAngle?:number,area=false) {
     if(e.hp<=0)return;
@@ -191,20 +207,24 @@ export class Combat {
         const heavy=this.pathId==='breaker' && this.masteryActive && ++this.swings%3===0;
         const counter=this.counterReady,radius=(110+level*7)*this.reach*(heavy?1.3:1);
         const half=this.pathId==='breaker'?1.22:.88;
-        for(const e of this.nearby(p.x,p.y,radius)){
+        const targets=this.nearby(p.x,p.y,radius).filter(e=>{
           const dx=e.x-p.x,dy=e.y-p.y;
-          if(dx*Math.cos(angle)+dy*Math.sin(angle)<Math.hypot(dx,dy)*Math.cos(half))continue;
+          return dx*Math.cos(angle)+dy*Math.sin(angle)>=Math.hypot(dx,dy)*Math.cos(half);
+        });
+        for(const e of targets){
+          if(this.relic==='briar'&&targets.length>=3)e.slow=Math.max(e.slow,isChief(e.kind)?.30:1);
           const bonus=heavy&&this.classTalent&&(isChief(e.kind)||e.kind==='brute'||e.kind==='crystal')?1.4:1;
-          this.hit(e,36*scale*(counter?2:heavy?1.7:1)*bonus,'blade',false,angle);
+          this.hit(e,36*scale*(counter?2:heavy?1.7:1)*bonus*(this.relic==='whetstone'&&targets.length===1?1.25:1),'blade',false,angle);
         }
         if(counter&&this.classTalent)p.hp=Math.min(p.maxHp,p.hp+6);
         this.counterReady=false;this.effect({kind:'slash',x:p.x,y:p.y,tx:angle,radius});
       }else{
         const volley=this.pathId==='volley',arrows=volley?(this.masteryActive?5:3):1;
+        const feather=this.relic==='longfeather'&&distance2(p,target)>200**2;
         const aimed=!volley&&this.masteryActive&&distance2(p,target)>200**2;
         for(let i=0;i<arrows;i++){
           const arrow=this.fire('bow',target,36*scale*(volley?.64:aimed?1.55:1),460,volley?1+Math.floor(level/3):3+Math.floor(level/2),(i-(arrows-1)/2)*.14);
-          if(arrow)arrow.aimed=aimed;
+          if(arrow){arrow.aimed=aimed;if(feather){arrow.damage*=1.15;arrow.pierce++;}}
         }
       }
     }else if(weapon==='spark'){
@@ -247,7 +267,7 @@ export class Combat {
     if(z.shape==='lane' && owner){owner.charge={angle,remaining:z.radius};return;}
     const inRadius=d<=z.radius;
     const hit=inRadius && (z.shape==='ring'?d>=z.radius*.54:z.shape==='cleave'?dx*Math.cos(angle)+dy*Math.sin(angle)>=d*Math.cos(.85):true);
-    if(hit)this.hurt(z.damage,z.x,z.y);
+    if(hit)this.hurt(z.damage,z.x,z.y,z.shape==='ring'?'ring':z.shape==='cleave'?'cleave':'disk');
     if(owner?.kind==='boss' && z.shape==='disk')owner.recovery=1.15;
     this.effect({kind:'impactZone',x:z.x,y:z.y,radius:z.radius,tx:angle,shape:z.shape});
   }
@@ -259,6 +279,8 @@ export class Combat {
     this.harvestTime=Math.max(0,this.harvestTime-dt);
     if(control.dash && this.dashCooldown===0){
       this.dashAngle=length>.05?Math.atan2(control.y,control.x):p.angle;
+      if(this.relic==='quicknock')this.weaponClocks.bow=0;
+      if(this.relic==='waywick')this.zones.push({id:this.nextId(),kind:'ember',x:p.x,y:p.y,radius:62,life:2,tick:0,timer:0,damage:7*this.power});
       this.dashTime=DASH_TIME;this.evadeWindow=.16;this.dashCooldown=4.2;
       if(this.pathId==='ash' && this.masteryActive && this.shots.length<280){
         const speed=540;
@@ -307,10 +329,11 @@ export class Combat {
   }
 
   step(dt:number,control:Controls) {
-    if(this.ended||this.pendingLevels>0||this.giftPending)return;
+    if(this.ended||this.pendingLevels>0||this.giftPending||this.relicPending)return;
     dt=Math.min(dt,0.05);this.weaponMotion=Math.max(0,this.weaponMotion-dt*4.5);this.seconds+=dt;this.ticks++;this.effects.length=0;
     const p=this.player;p.invincible=Math.max(0,p.invincible-dt);
     this.flameTime=Math.max(0,this.flameTime-dt);this.move(dt,control);
+    if(this.relic==='stillglass')this.focus=p.moving?0:Math.min(1,this.focus+dt);
     if(this.seconds>=480){this.ended=true;return;}
     if(this.seconds>=180 && this.seconds<360 && !this.miniSpawned){
       this.miniSpawned=true;this.spawn(this.seed%2===0?'boar':'mothQueen');
@@ -332,7 +355,7 @@ export class Combat {
       if(e.charge){
         const step=Math.min(e.charge.remaining,dt*610),a=e.charge.angle;
         const forward=dx*Math.cos(a)+dy*Math.sin(a),side=Math.abs(-dx*Math.sin(a)+dy*Math.cos(a));
-        if(forward>=0 && forward<=step && side<=18)this.hurt(e.attack,e.x,e.y);
+        if(forward>=0 && forward<=step && side<=18)this.hurt(e.attack,e.x,e.y,'charge');
         e.x+=Math.cos(a)*step;e.y+=Math.sin(a)*step;e.charge.remaining-=step;e.attackPose=.15;
         if(e.charge.remaining<=0)e.charge=undefined;
         continue;
@@ -408,14 +431,14 @@ export class Combat {
         if(this.classTalent && caught.length>=2)p.hp=Math.min(p.maxHp,p.hp+3);
         this.effect({kind:'bloom',x:z.x,y:z.y,radius:z.radius});
       }
-      if(z.tick<=0){z.tick=0.5;for(const e of this.nearby(z.x,z.y,z.radius)){this.hit(e,z.damage,z.kind,true);if(z.kind==='spore')e.spore=2;else e.burn=2;}}
+      if(z.tick<=0){z.tick=0.5;for(const e of this.nearby(z.x,z.y,z.radius)){this.hit(e,z.damage,z.kind,true);if(z.kind==='spore')e.spore=2;else e.burn=Math.max(2,e.burn);}}
     }
     this.zones=this.zones.filter(z=>z.life>0);
     // A full spell field must not erase a windup or cancel the attack it announces.
     if(this.zones.length>45){let excess=this.zones.length-45;this.zones=this.zones.filter(z=>z.kind==='warning'||excess--<=0);}
     for(const shot of this.shots){
       shot.life-=dt;shot.x+=shot.vx*dt;shot.y+=shot.vy*dt;
-      if(shot.weapon==='enemy'){if(distance2(shot,p)<(shot.radius+13)**2){this.hurt(shot.damage,shot.x-shot.vx*.12,shot.y-shot.vy*.12);shot.life=0;}continue;}
+      if(shot.weapon==='enemy'){if(distance2(shot,p)<(shot.radius+13)**2){this.hurt(shot.damage,shot.x-shot.vx*.12,shot.y-shot.vy*.12,shot.missile??'missile');shot.life=0;}continue;}
       for(const e of this.nearby(shot.x,shot.y,shot.radius,this.shotCandidates,62)){
         if(e.hp<=0||shot.hit.has(e.id))continue;
         const aimed=shot.aimed&&this.classTalent&&(isChief(e.kind)||e.kind==='brute'||e.kind==='crystal');
@@ -454,6 +477,7 @@ export class Combat {
         else {const pile=this.drops.length>=320?this.drops.find(d=>d.kind==='coin'):undefined;
           if(pile)pile.value+=gold;else this.drops.push({id:this.nextId(),kind:'coin',x:e.x-9,y:e.y,born:this.seconds,value:gold});}
       }
+      if((e.kind==='boar'||e.kind==='mothQueen')&&!this.relic)this.relicPending=true;
       if(e.kind==='boss'){this.won=p.hp>0;this.ended=true;}
     }
     this.enemies=this.enemies.filter(e=>e.hp>0 && (isChief(e.kind) || distance2(e,p)<1400**2));

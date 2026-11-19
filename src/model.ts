@@ -1,3 +1,4 @@
+import {isRelic,type RelicId} from './relics';
 import type {Job} from './stylesOfPlay';
 import {freshRanks,readPurse,type Purse} from './camp';
 import { readDifficulty,type Difficulty } from './difficulty';
@@ -9,13 +10,16 @@ export class Random {
   between(min:number,max:number) { return min+(max-min)*this.next(); }
   pick<T>(items:T[]):T { return items[Math.floor(this.next()*items.length)]; }
 }
-export function upgradeChoices(build:Build, unlocked:string[], rng:Random):UpgradeId[] {
-  const candidates=ABILITIES.filter(a=>{
+export function upgradePool(build:Build, unlocked:string[]){
+  return ABILITIES.filter(a=>{
     if ((build[a.id]??0)>=a.max) return false;
     if (!build[a.id] && a.kind==='weapon' && !unlocked.includes(a.id)) return false;
     const slots=ABILITIES.filter(b=>b.kind===a.kind && (build[b.id]??0)>0).length;
     return !!build[a.id] || slots<4;
   });
+}
+export function upgradeChoices(build:Build, unlocked:string[], rng:Random,omit:readonly string[]=[]):UpgradeId[] {
+  const candidates=upgradePool(build,unlocked).filter(a=>!omit.includes(a.id));
   // Weighted sampling without replacement: support current builds without forcing a recipe.
   const result:UpgradeId[]=[];
   while(result.length<3 && candidates.length) {
@@ -31,10 +35,10 @@ export const xpNeeded=(level:number)=>Math.round(9+level*3.8+level*level*0.12);
 export const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n));
 export interface RunSummary { job:Job; seconds:number; kills:number; won:boolean; level:number; synergy:boolean; seed:number }
 export interface Save extends Purse {
-  version:1; runs:number; kills:number; bestTime:number; wins:CharacterId[]; jobWins:Job[]; achievements:string[];
+  version:1; relics:RelicId[]; runs:number; kills:number; bestTime:number; wins:CharacterId[]; jobWins:Job[]; achievements:string[];
   settings:{difficulty:Difficulty;music:number;sound:number;quality:'high'|'low';showFps:boolean;showEnemyHealth:boolean;showEnemyHealthNumbers:boolean};
 }
-export const newSave=():Save=>({gold:0,training:freshRanks(),version:1,runs:0,kills:0,bestTime:0,wins:[],jobWins:[],achievements:[],settings:{difficulty:'normal',music:0.3,sound:0.5,quality:'high',showFps:false,showEnemyHealth:true,showEnemyHealthNumbers:false}});
+export const newSave=():Save=>({relics:[],gold:0,training:freshRanks(),version:1,runs:0,kills:0,bestTime:0,wins:[],jobWins:[],achievements:[],settings:{difficulty:'normal',music:0.3,sound:0.5,quality:'high',showFps:false,showEnemyHealth:true,showEnemyHealthNumbers:false}});
 export function parseSave(value:unknown):Save {
   if(!value||typeof value!=='object') throw new Error('存档格式无效');
   const s=value as Save;
@@ -44,7 +48,8 @@ export function parseSave(value:unknown):Save {
   if(s.jobWins!==undefined && (!Array.isArray(s.jobWins)||!s.jobWins.every(j=>['mage','warden','hunter'].includes(j))))throw Error('职业记录无效');
   if(!Array.isArray(s.achievements)||!s.achievements.every(id=>['first','survivor','hunter','synergy','dawn','master'].includes(id))) throw new Error('成就记录无效');
   if(!s.settings||!Number.isFinite(s.settings.music)||!Number.isFinite(s.settings.sound)) throw new Error('设置无效');
-  return {...readPurse(s),version:1,runs:Math.floor(s.runs),kills:Math.floor(s.kills),bestTime:Math.min(480,s.bestTime),wins:[...new Set(s.wins)],jobWins:[...new Set(s.jobWins??[])],achievements:[...new Set(s.achievements)],settings:{difficulty:readDifficulty(s.settings.difficulty),music:clamp(s.settings.music,0,1),sound:clamp(s.settings.sound,0,1),quality:s.settings.quality==='low'?'low':'high',showFps:s.settings.showFps===true,showEnemyHealth:s.settings.showEnemyHealth!==false,showEnemyHealthNumbers:s.settings.showEnemyHealthNumbers===true}};
+  if(s.relics!==undefined && (!Array.isArray(s.relics)||!s.relics.every(isRelic)))throw Error('遗物记录无效');
+  return {relics:[...new Set(s.relics??[])],...readPurse(s),version:1,runs:Math.floor(s.runs),kills:Math.floor(s.kills),bestTime:Math.min(480,s.bestTime),wins:[...new Set(s.wins)],jobWins:[...new Set(s.jobWins??[])],achievements:[...new Set(s.achievements)],settings:{difficulty:readDifficulty(s.settings.difficulty),music:clamp(s.settings.music,0,1),sound:clamp(s.settings.sound,0,1),quality:s.settings.quality==='low'?'low':'high',showFps:s.settings.showFps===true,showEnemyHealth:s.settings.showEnemyHealth!==false,showEnemyHealthNumbers:s.settings.showEnemyHealthNumbers===true}};
 }
 export function finishRun(save:Save,run:RunSummary):string[] {
   const before=new Set(save.achievements); save.runs++; save.kills+=run.kills; save.bestTime=Math.max(save.bestTime,run.seconds);

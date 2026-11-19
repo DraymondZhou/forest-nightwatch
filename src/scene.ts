@@ -20,7 +20,7 @@ import type {AudioDirector} from './audio';
 const enemyTexture=(kind:string)=>kind==='boar'||kind==='mothQueen'||kind==='boss'?'mini-bosses':'enemies';
 const TINT:Record<string,number>={spark:0xa0ecdf,spore:0xc4d599,leaf:0xe2d79b,ember:0xf2b17a,frost:0xb8d9ef,comet:0xd2b0e5,enemy:0xf29483};
 type VisualEffect=Effect&{life:number;max:number;fromWand?:boolean;arc?:ReturnType<typeof shapeLightning>};
-export interface SceneHooks {tick:(sim:Combat,stats:FrameStats)=>void;health:(sim:Combat)=>void;showFps:()=>boolean;upgrade:()=>void;gift:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean;showEnemyHealth:()=>boolean;showEnemyHealthNumbers:()=>boolean}
+export interface SceneHooks {tick:(sim:Combat,stats:FrameStats)=>void;health:(sim:Combat)=>void;showFps:()=>boolean;upgrade:()=>void;gift:()=>void;relic:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean;showEnemyHealth:()=>boolean;showEnemyHealthNumbers:()=>boolean}
 export class ForestScene extends Phaser.Scene {
   sim?:Combat;running=false;private hooks:SceneHooks;
   private woods!:Woodland;private worldInk!:Phaser.GameObjects.Graphics;private fxInk!:Phaser.GameObjects.Graphics;
@@ -143,6 +143,7 @@ export class ForestScene extends Phaser.Scene {
         }else this.hooks.end();
         break;
       }
+      if(this.sim.relicPending){this.running=false;this.hooks.relic();break;}
       if(this.sim.giftPending){this.running=false;this.hooks.gift();break;}
       if(this.sim.pendingLevels>0){this.running=false;this.hooks.upgrade();break;}
     }
@@ -246,7 +247,7 @@ export class ForestScene extends Phaser.Scene {
           g.lineStyle(2,0xbadb98,.65);g.beginPath();g.arc(z.x,z.y,z.radius,-Math.PI/2,-Math.PI/2+size*Math.PI*2);g.strokePath();
           this.fieldMarks.paint(MARK.leaf,z.x,z.y,15+9*size,0,.85);
         }
-        g.fillStyle(z.kind==='spore'?0xa1b97b:0xde9d60,.13);g.fillCircle(z.x,z.y,z.radius);g.lineStyle(1,z.kind==='spore'?0xb7cf94:0xf2b17a,.32);g.strokeCircle(z.x,z.y,z.radius);for(let i=0;i<5;i++){const a=i/5*Math.PI*2+z.id;const x=z.x+Math.cos(a)*z.radius*.6,y=z.y+Math.sin(a)*z.radius*.6;this.fieldMarks.paint(MARK.spore,x,y,16+(i%2)*4,.14*Math.sin(sim.seconds*2+i),.86);}}
+        g.fillStyle(z.kind==='spore'?0xa1b97b:0xde9d60,.13);g.fillCircle(z.x,z.y,z.radius);g.lineStyle(1,z.kind==='spore'?0xb7cf94:0xf2b17a,.32);g.strokeCircle(z.x,z.y,z.radius);for(let i=0;i<5;i++){const a=i/5*Math.PI*2+z.id;const x=z.x+Math.cos(a)*z.radius*.6,y=z.y+Math.sin(a)*z.radius*.6;this.fieldMarks.paint(z.kind==='ember'?MARK.ember:MARK.spore,x,y,16+(i%2)*4,.14*Math.sin(sim.seconds*2+i),.86);}}
     }
     this.pickups.draw(sim,view);
     const living=this.visibleEnemies;living.clear();

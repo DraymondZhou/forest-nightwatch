@@ -40,7 +40,8 @@ describe('combat balance fixtures', () => {
           moveY+=urgency*awayY/distance;
         }
         sim.step(1/60,{x:moveX,y:moveY});
-        while(sim.pendingLevels){
+        if(sim.relicPending)sim.takeRelic(sim.path.job==='mage'?'waywick':sim.path.job==='warden'?'whetstone':'longfeather');
+    while(sim.pendingLevels){
           const choices=upgradeChoices(sim.build,['spark','spore','leaf','ember'],sim.rng);
           const priority=['spark','spore','ember','power','leaf','haste','reach','vigor'];
           const rank=(key:string)=>priority.includes(key)?priority.indexOf(key):20;

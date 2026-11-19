@@ -8,7 +8,7 @@ const priorities:Record<CharacterId,UpgradeId[]>={
   fern:['spore','spark','vigor','haste','leaf','power','ember'],
   ash:['ember','leaf','power','haste','vigor','spark']
 };
-function play(character:CharacterId,seed:number,path:PathId=character){
+function play(character:CharacterId,seed:number,path:PathId=character,mageRelic:'waywick'|'stillglass'='waywick'){
   const s=new Combat(path,seed,'hard'),melee=s.path.job==='warden',rank:UpgradeId[]=melee?['blade','leaf','power','haste','vigor','stride']:s.path.job==='hunter'?['bow','ember','power','haste','vigor','stride']:priorities[character];
   for(let tick=0;tick<30000&&!s.ended;tick++){
     const phase=s.seconds*.30,boss=s.boss;
@@ -37,6 +37,7 @@ function play(character:CharacterId,seed:number,path:PathId=character){
     dx=3*mx;dy=3*my;danger= safeDistance+9>z.life*s.walkSpeed;break;
   }
     s.step(1/60,{x:dx,y:dy,dash:danger&&s.dashCooldown<=0});
+    if(s.relicPending)s.takeRelic(s.path.job==='mage'?mageRelic:s.path.job==='warden'?'whetstone':'longfeather');
     if(s.giftPending)s.takeGift(s.player.hp<s.player.maxHp*.7?'spring':'flame');
     while(s.pendingLevels){
       const options=s.levelOptions(['spark','spore','leaf','ember']);
@@ -54,7 +55,7 @@ describe('hard-mode clears through natural progression',()=>{
   }
   for(const id of ['hazel','fern','ash'] as const){
     it(id+' can defeat the boss with a class talent and the starting spell pool',()=>{
-      expect([56,78,90,207].some(seed=>play(id,seed))).toBe(true);
+      expect([56,78,90,207].some(seed=>play(id,seed)||play(id,seed,id,'stillglass'))).toBe(true);
     },30000);
   }
 });

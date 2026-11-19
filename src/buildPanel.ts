@@ -1,3 +1,4 @@
+import {RELICS} from './relics';
 import {JOBS} from './stylesOfPlay';
 import type { Combat } from './combat';
 import { MASTERY_LEVEL, ABILITIES, ability, type Ability, type WeaponId } from './content';
@@ -40,7 +41,7 @@ export function buildPanel(run:Combat,time:string) {
   return `<div class="run-readout"><strong>${JOBS[run.path.job].name} · ${run.path.name}</strong><span>${run.rules.label}难度</span><span>等级 ${run.level}</span>
     <span>击败 ${run.kills}</span><time>${time}</time></div>
     <div class="build-scroll" tabindex="0" role="region" aria-label="本局构筑详情"><div class="build-columns">
-      <section><h3>已选技能</h3>${group('weapon')}
+      <section>${run.relic?`<h3>本局遗物 · ${RELICS[run.relic].name}</h3><p>${RELICS[run.relic].tip}</p>`:''}<h3>已选技能</h3>${group('weapon')}
       <h3>被动天赋</h3>${group('passive')||'<p class="build-empty">尚未选择被动天赋</p>'}
       </section>
       <section><h3>当前数值</h3><dl class="stat-list">${stats.map(([name,value])=>`<div><dt>${name}</dt><dd>${value}</dd></div>`).join('')}</dl>

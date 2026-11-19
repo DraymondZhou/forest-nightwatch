@@ -26,7 +26,7 @@ describe('permanent camp progression',()=>{
     const s=new Combat('hazel',7),p=s.player;s.build={};
     const e=s.spawn('boar',p.x+190,p.y)!;e.hp=0;s.step(.016,{x:0,y:0});
     const coin=s.drops.find(d=>d.kind==='coin')!;expect(coin.value).toBe(12);expect(s.coins).toBe(0);
-    p.x=coin.x;p.y=coin.y;s.step(.016,{x:0,y:0});expect(s.coins).toBe(12);
+    s.takeRelic('waywick');p.x=coin.x;p.y=coin.y;s.step(.016,{x:0,y:0});expect(s.coins).toBe(12);
     s.pendingLevels=0;s.spawn('boss',p.x+350,p.y)!.hp=0;s.step(.016,{x:0,y:0});s.step(.016,{x:0,y:0});expect(s.won).toBe(true);expect(s.coins).toBe(37);
   });
 });

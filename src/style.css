@@ -88,3 +88,7 @@
 .job-card img{width:100%;height:clamp(66px,18dvh,132px);object-fit:contain;background:radial-gradient(ellipse at 50% 90%,#52614666,transparent 68%)}.training-row{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid #62775b;padding:10px 0}.training-row p{margin:.25em 0}.purse b{color:#f2d788}
 
 #gold {color:#f5d78e;font-size:11px;margin-right:.45em}
+
+.relic-card img{width:100%;height:clamp(55px,17dvh,104px);object-fit:contain}.relic-card small{color:#e2c789}.relic-book li{justify-content:flex-start;align-items:center}.relic-book img{width:46px;height:46px}.relic-book .unfound{filter:grayscale(1);opacity:.55}.relic-book small,.relic-book span{display:block}
+
+.hud-relic{width:22px;height:22px;object-fit:contain;align-self:center}

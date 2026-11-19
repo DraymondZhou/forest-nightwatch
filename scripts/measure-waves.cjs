@@ -69,6 +69,7 @@ function play(C,pathId,seed,mode,readWarnings){
   }}
   s.step(1/60,{x:dx,y:dy,dash:danger&&s.dashCooldown<=0});
   for(const {e,rec} of active){if(e.hp<e.maxHp && rec.firstHit===null)rec.firstHit=s.seconds;if(e.hp<=0 && rec.dead===null)rec.dead=s.seconds;}
+  if(s.relicPending)s.takeRelic(workerData.alternate ? (s.path.job==='mage'?'stillglass':s.path.job==='warden'?'briar':'quicknock') : (s.path.job==='mage'?'waywick':s.path.job==='warden'?'whetstone':'longfeather'));
   if(s.giftPending)s.takeGift(s.player.hp<s.player.maxHp*.7?'spring':'flame');
   while(s.pendingLevels){const options=s.levelOptions(['spark','spore','leaf','ember']);s.resolveLevel(options.includes('mastery')?'mastery':priority.find(id=>options.includes(id))??options[0]);}
   if(tick%3600===0)phases.push({minute:tick/3600,kills:s.kills,level:s.level,hp:s.player.hp});
@@ -82,7 +83,7 @@ async function main(){const root=path.resolve(process.argv[2]||'.'),tag=process.
  const file=path.join(out,'fast-'+tag+'.bundle.cjs');require('esbuild').buildSync({entryPoints:[path.join(root,'src/combat.ts')],platform:'node',format:'cjs',bundle:true,outfile:file});
  const {Combat}=require(file),hp={};for(const m of modes){hp[m]={};for(const sec of [0,60,180,360]){const s=new Combat('hazel',56,m);s.seconds=sec;hp[m][sec]=Object.fromEntries(['slime','twig','brute','boar','mothQueen','boss'].map(k=>[k,Math.round(s.spawn(k).maxHp)]));}}
  const selected=process.argv[4]?process.argv[4].split(','):modes;
- const rows=(await Promise.all(selected.map(mode=>new Promise((res,rej)=>{const w=new Worker(__filename,{workerData:{mode,file,readWarnings:process.argv[5]==='read'}});w.once('message',res);w.once('error',rej);w.once('exit',c=>{if(c)rej(Error('worker '+c));});})))).flat();
+ const rows=(await Promise.all(selected.map(mode=>new Promise((res,rej)=>{const w=new Worker(__filename,{workerData:{mode,file,readWarnings:process.argv[5]==='read',alternate:process.argv[6]==='alternate'}});w.once('message',res);w.once('error',rej);w.once('exit',c=>{if(c)rej(Error('worker '+c));});})))).flat();
  const result={tag,seeds,hp,rows};fs.writeFileSync(path.join(out,'chief-'+tag+'.json'),JSON.stringify(result));const report=['group | wins | mini kills/encounters median spawn-to-death / first-hit-to-death (s) | final kills/encounters median spawn-to-death / first-hit-to-death (s)',...selected.map(m=>lines(m,rows.filter(r=>r.mode===m))),...paths.map(p=>lines('hard '+p,rows.filter(r=>r.mode==='hard'&&r.pathId===p)))].join('\n');fs.writeFileSync(path.join(out,'chief-'+tag+'.txt'),report);console.log(report);
  for(const mode of selected){for(const m of [3,5,7]){let t=0,f=0,fast=0;for(const r of rows.filter(r=>r.mode===mode)){const w=r.windows[m];t+=w.touched;f+=w.first;fast+=w.fast;}console.log(mode,m+'m',{touched:t,oneHit:f,within300ms:fast});}}}
 if(isMainThread)main().catch(e=>{console.error(e);process.exitCode=1});else{const {Combat}=require(workerData.file);parentPort.postMessage(paths.flatMap(p=>seeds.map(seed=>play(Combat,p,seed,workerData.mode,workerData.readWarnings))));}
