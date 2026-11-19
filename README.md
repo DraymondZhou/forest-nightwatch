@@ -1,6 +1,6 @@
 # 森光守夜 · Forest Nightwatch
 
-**当前版本：v1.10.0 · 职业造型与营地训练**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.10.0) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.10.0/Forest-Nightwatch-v1.10.0.html)
+**当前版本：v1.10.1 · 全身职业卡与猎手移动**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.10.1) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.10.1/Forest-Nightwatch-v1.10.1.html)
 
 《森光守夜》是一款支持手机横屏和电脑浏览器的森林生存肉鸽。先选职业，再选流派：法师靠雷电、孢子或余火控制战场；剑卫用盾反或重斩近身作战；猎手用穿杨或散射调整交战距离。
 
@@ -36,7 +36,7 @@ npm run build
 
 ## 资源与许可
 
-剑卫和猎手的独立动作图集由 `scripts/bake-martial.cjs` 烘焙，每份含 36 帧。三只首领沿用原造型绘制正常和受损两套动作，每只共 48 帧，见 `scripts/bake-mini-bosses.cjs` 和 `scripts/bake-chief-regalia.cjs`；不同敌种的树脂弹、晶片、蛾粉和树种由 `src/encounterInk.ts` 绘制。
+剑卫和猎手的独立动作图集由 `scripts/bake-martial.cjs` 烘焙，基础图集每份含 36 帧；猎手移动时分别绘制腿和上身，每个方向有 24 个步态采样，开弓并不打断步态。职业卡使用完整人物并统一脚底线。三只首领沿用原造型绘制正常和受损两套动作，每只共 48 帧，见 `scripts/bake-mini-bosses.cjs` 和 `scripts/bake-chief-regalia.cjs`；不同敌种的树脂弹、晶片、蛾粉和树种由 `src/encounterInk.ts` 绘制。
 
 星雷命中图集 `public/art/storm-impact.png` 改编自 13rice 的 *Radial lightning effect*。本作裁取六帧，并为普通和满电攻击分别着色。原素材采用 CC0。[作者及原图](https://opengameart.org/content/radial-lightning-effect) · [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
 

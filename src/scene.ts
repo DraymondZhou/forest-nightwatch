@@ -36,10 +36,11 @@ export class ForestScene extends Phaser.Scene {
   private readonly touchControl=matchMedia('(pointer: coarse)');
   private woundText!:Phaser.GameObjects.BitmapText;
   private texts:Phaser.GameObjects.Text[]=[];private textCursor=0;private effects:VisualEffect[]=[];
-  private keys?:Record<string,Phaser.Input.Keyboard.Key>;private accumulator=0;private uiClock=0;private readonly frameStats=new FrameStats();
+  private keys?:Record<string,Phaser.Input.Keyboard.Key>;private accumulator=0;private previousX=0;private previousY=0;private uiClock=0;private readonly frameStats=new FrameStats();
   private stick?:{id:number;x:number;y:number};private movement={x:0,y:0};private stickInk!:Phaser.GameObjects.Graphics;
   constructor(hooks:SceneHooks){super('forest');this.hooks=hooks;}
   preload(){
+    this.load.spritesheet('hunter-motion',art('hunter-motion.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('martial-heroes',art('martial-heroes.png'),{frameWidth:128,frameHeight:128});
     this.load.atlas('hurt-faces',art('hurt-faces.png'),hurtFaces);
     this.load.spritesheet('mini-bosses',art('mini-bosses.png'),{frameWidth:128,frameHeight:128});
@@ -114,21 +115,22 @@ export class ForestScene extends Phaser.Scene {
     this.tweens.killTweensOf(this.woundText);this.woundText.setVisible(false);
     this.fxInk.clear();this.worldInk.clear();this.health.begin();this.health.end();
     this.lastGather=-1;this.stickState='';
-    this.sim=sim;this.accumulator=0;this.uiClock=0;this.frameStats.reset();this.effects=[];
+    this.sim=sim;this.previousX=sim.player.x;this.previousY=sim.player.y;this.accumulator=0;this.uiClock=0;this.frameStats.reset();this.effects=[];
     this.sprites.forEach(s=>{s.setVisible(false);this.spritePool.push(s)});this.sprites.clear();this.texts.forEach(t=>t.setVisible(false));
     this.rig?.destroy();this.rig=sim.path.job==='mage'?new WitchRig(this,0xffffff):new MartialRig(this,sim.path.job);this.running=true;
     this.rig.update(0,false,0,false,0);
     this.rig.root.setPosition(sim.player.x,sim.player.y).setDepth(1000);this.cameras.main.centerOn(sim.player.x,sim.player.y);
-    this.cameras.main.startFollow(this.rig.root,true,.12,.12);this.cameras.main.setZoom(1);
+    this.cameras.main.startFollow(this.rig.root,sim.path.job!=='hunter',.12,.12);this.cameras.main.setZoom(1);
     this.hooks.tick(sim,this.frameStats);
   }
-  setPaused(paused:boolean){this.running=!paused;this.dashQueued=false;this.frameStats.reset();this.movement={x:0,y:0};this.stick=undefined;this.stickInk?.clear();this.stickState='';this.accumulator=0;this.input?.keyboard?.resetKeys();}
+  setPaused(paused:boolean){if(this.sim){this.previousX=this.sim.player.x;this.previousY=this.sim.player.y;}this.running=!paused;this.dashQueued=false;this.frameStats.reset();this.movement={x:0,y:0};this.stick=undefined;this.stickInk?.clear();this.stickState='';this.accumulator=0;this.input?.keyboard?.resetKeys();}
   update(_time:number,delta:number){
     if(!this.sim||!this.rig||!this.running)return;
     const dt=Math.min(delta/1000,.1);
     const k=this.keys;const input={x:this.movement.x+(k?.D.isDown||k?.RIGHT.isDown?1:0)-(k?.A.isDown||k?.LEFT.isDown?1:0),y:this.movement.y+(k?.S.isDown||k?.DOWN.isDown?1:0)-(k?.W.isDown||k?.UP.isDown?1:0)};
     this.accumulator=Math.min(this.accumulator+dt,.1);
     while(this.accumulator>=1/60&&this.running){
+      this.previousX=this.sim.player.x;this.previousY=this.sim.player.y;
       this.sim.step(1/60,{...input,dash:this.dashQueued});this.dashQueued=false;this.accumulator-=1/60;this.captureEffects();
       if(this.sim.ended){
         this.running=false;
@@ -143,7 +145,10 @@ export class ForestScene extends Phaser.Scene {
       if(this.sim.pendingLevels>0){this.running=false;this.hooks.upgrade();break;}
     }
     this.rig.update(dt,this.sim.player.moving,this.sim.player.angle,this.sim.player.invincible>0,this.sim.seconds,this.sim.dashTime);
-    this.rig.root.setPosition(this.sim.player.x,this.sim.player.y);
+    // Render between the two fixed simulation samples on high-refresh displays.
+    const blend=this.sim.path.job==='hunter' && this.running?Math.min(1,this.accumulator*60):1;
+    const p=this.sim.player;
+    this.rig.root.setPosition(this.previousX+(p.x-this.previousX)*blend,this.previousY+(p.y-this.previousY)*blend);
     this.woods.follow(this.sim.player.x,this.sim.player.y,this.sim.seed);this.drawWorld();this.drawRemains(dt);this.drawEffects(this.running?dt:0);this.drawStick();
     this.uiClock+=dt;if(this.uiClock>.12){this.uiClock=0;this.hooks.tick(this.sim,this.frameStats);}
   }

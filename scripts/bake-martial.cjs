@@ -28,8 +28,8 @@ const shield=p('M-11 -11 Q-4 -14 0 -16Q5 -13 11 -12L10 1Q8 9 0 15Q-7 10 -10 3Z',
 function body(ward,side,back){if(ward)return p('M-12 -2L9 -2 13 7 10 16 14 30 4 27 -2 31 -12 28 -16 30 -10 14Z',cloth)+p('M-12 0 Q0 -6 12 0L13 7 9 18 2 20 -9 16 -12 9Z',steel)+p('M-10 5Q0 11 11 3L8 14 2 17 -8 14Z',iron,0)+l('M-10 3Q-2 8 9 2M-7 11L-2 13M-6 23L-8 26',light,1.3)+p('M-10 16Q0 19 10 15L11 19 0 22 -11 20Z',hide)+l('M-10 22l2 1M-11 24l2 1M8 23l2 1M9 25l2 1','#af7357',.8)+at(side?3:0,18,p('M-2 -1.5L2 -1.5 2 1.5 -2 1.5Z',edge,.7))+(!back?p('M-14 -1Q-9 -7 -3 -2L-4 4 -14 7 -17 4Z',steel)+l('M-14 1l7 -1',light):p('M-9 -4L8 -3 12 18 8 26 2 24 -7 27 -13 22Z',cloth)+l('M-8 0l-2 18M5 1l4 18','#ab6450'));
  return p('M-8 -1L8 -3 9 8 7 16 11 27 4 26 1 29 -8 25 -12 28 -7 11Z','#716445')+p('M-11 -2Q-1 -7 9 -2L12 7 7 8 9 12 2 11 -3 16 -7 12 -13 14 -11 9 -15 10Z',moss)+l('M-9 0l-3 7M-6 3l-2 5M3 3l4 3M1 7l2 1M0 8l2 2M-3 7l-2 4M8 5l1 2','#9ea782',1.25)+p('M-9 16L8 12 9 15 -8 20Z',hide)+p('M4 15L9 14 11 19 9 22 3 21Z','#9a7951')+(back?'':l('M-6 16L6 -1','#ae8c60',2.3))}
 const quiver=rot(21,p('M-3 -23L-3.5 -29 -1 -27 0 -31 1 -26 0 -22ZM1 -21L1 -27 3 -25 5 -28 4 -23 3 -21Z','#b3bc93',.7)+l('M-1 -26L-1 -15M3 -25L2 -15','#ad8054',1.2)+p('M-4 -18L4 -18 3.5 5 0 9 -3 7Z',hide)+l('M-3 -15L3 -15M-2.5 3L3 3',edge,1.5));
-function figure(ward,view,frame){const side=view===1,back=view===2,atk=frame>=6&&frame<10,hurt=frame===10,quiet=frame===11;
- const stride=frame<6?Math.sin(frame*Math.PI/3):0,t=atk?frame-6:0,bob=frame<6?-Math.abs(stride)*1.5:hurt?2:0,hip=ward?6:4.8;
+function figure(ward,view,frame,layer,legPhase=0){const side=view===1,back=view===2,atk=frame>=6&&frame<10,hurt=frame===10,quiet=frame===11;
+ const stride=layer==='legs'?Math.sin(legPhase*Math.PI/12):frame<6?Math.sin(frame*Math.PI/3):0,t=atk?frame-6:0,bob=frame<6?-Math.abs(stride)*1.5:hurt?2:0,hip=ward?6:4.8;
  const legs=leg(64-(side?2:hip),-stride,side,true,ward)+leg(64+(side?2:hip),stride,side,false,ward);
  const shoulders=[side?-3:-9,side?5:9],core=at(0,0,body(ward,side,back)),head=at(side?1:0,-7,ward?helmet(side,back,hurt):hoodHead(side,back,hurt));
  let rear='',front='';
@@ -44,10 +44,17 @@ function figure(ward,view,frame){const side=view===1,back=view===2,atk=frame>=6&
  if(atk&&t<2&&side)front+=l('M'+nock[0]+' '+nock[1]+'l23 -2','#d5bc8f',1)+at(nock[0]+23,nock[1]-2,p('M0 0l-4 -2 1 3Z',light,.6));}
  const carry=!ward?at(side?-9:back?-6:-12,10,rot(-42,quiver)):'';
  const torso=(back?'':carry)+rear+core+(back?carry:'')+front+head;
- return legs+at(64+(hurt?-1:0),51+bob,rot((hurt?-7:quiet?0:stride)*.8,torso))}
-(async()=>{const layers=[];for(let role=0;role<2;role++)for(let view=0;view<3;view++)for(let f=0;f<12;f++)layers.push({input:svg(figure(!role,view,f)),left:f*128,top:(role*3+view)*128});
+ if(layer==='legs')return legs;
+ return (layer==='torso'?'':legs)+at(64+(hurt?-1:0),51+bob,rot((hurt?-7:quiet?0:stride)*.8,torso))}
+async function bakeHunter(){
+ // Each view has 24 independent gait samples and six torso poses; origins match the old rig.
+ const layers=[];for(let view=0;view<3;view++)for(let slot=0;slot<30;slot++){
+   const index=view*30+slot,body=slot>=24;
+   layers.push({input:svg(figure(false,view,body?[11,6,7,8,9,10][slot-24]:0,body?'torso':'legs',slot)),left:index%10*128,top:Math.floor(index/10)*128});
+ }
+ await sharp({create:{width:1280,height:1152,channels:4,background:'#00000000'}}).composite(layers).png({palette:true,colours:192}).toFile(path.join(dest,'hunter-motion.png'));
+}
+(async()=>{await bakeHunter();if(process.argv.includes('--hunter-only'))return;const layers=[];for(let role=0;role<2;role++)for(let view=0;view<3;view++)for(let f=0;f<12;f++)layers.push({input:svg(figure(!role,view,f)),left:f*128,top:(role*3+view)*128});
  await sharp({create:{width:1536,height:768,channels:4,background:'#00000000'}}).composite(layers).png({palette:true,colours:192}).toFile(path.join(dest,'martial-heroes.png'));
- for(const [i,id] of ['warden','hunter'].entries())await sharp(svg(figure(!i,0,11),256)).extract({left:68,top:40,width:124,height:152}).resize(124,124,{fit:'contain',background:'#00000000'}).png().toFile(path.join(dest,'job-'+id+'.png'));
- const atlas=require('../src/traveler-atlas.json').frames;
- const extract=async(name,w)=>{let {x:left,y:top,w:width,h:height}=atlas[name].frame;return sharp(path.join(dest,'traveler.png')).extract({left,top,width,height}).resize({width:w}).png().toBuffer()};
- await sharp({create:{width:124,height:124,channels:4,background:'#00000000'}}).composite([{input:await extract('left-upper',13),left:79,top:60},{input:await extract('left-forearm',10),left:80,top:81},{input:await extract('body',61),left:31,top:58},{input:await extract('right-upper',14),left:32,top:65},{input:await extract('right-forearm',29),left:24,top:88},{input:await extract('head',78),left:22,top:0}]).png().toFile(path.join(dest,'job-mage.png'));})().catch(e=>{console.error(e);process.exitCode=1});
+ await require('./bake-job-portraits.cjs')(ward=>sharp(svg(figure(ward,0,11),384)).png().toBuffer());
+})().catch(e=>{console.error(e);process.exitCode=1});
