@@ -5,7 +5,7 @@ import { ATTACK_POSE_TIME,enemyPoseFrame,enemyRestFrame } from '../src/enemyPose
 describe('enemy animation and combat timing',()=>{
   it('keeps every species in its own atlas range and prioritizes a hit',()=>{
     const game=new Combat('hazel',17);
-    const kinds:EnemyKind[]=['slime','moth','twig','spitter','beetle','brute','crystal','boss'];
+    const kinds:EnemyKind[]=['slime','moth','twig','spitter','beetle','brute','crystal'];
     kinds.forEach((kind,index)=>{
       const e=game.spawn(kind,0,0)!;
       e.gait=.5;
@@ -16,6 +16,15 @@ describe('enemy animation and combat timing',()=>{
       e.flash=.08;
       expect(enemyPoseFrame(e,400)).toBe(index*24+20);
       expect(enemyRestFrame(kind)).toBe(index*24+23);
+    });
+  });
+  it('switches the chief to its wounded artwork without restarting its attack',()=>{
+    const game=new Combat('hazel',17);
+    (['boar','mothQueen','boss'] as const).forEach((kind,index)=>{
+      const e=game.spawn(kind,0,0)!;e.attackPose=ATTACK_POSE_TIME;
+      expect(enemyPoseFrame(e,400)).toBe(index*24+16);
+      e.hp=e.maxHp/2;
+      expect(enemyPoseFrame(e,400)).toBe(index*24+16+72);
     });
   });
   it('holds a stationary spitter, winds up, and releases on the projectile tick',()=>{

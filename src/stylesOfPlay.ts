@@ -3,9 +3,9 @@ import {CLASS_TALENTS,MASTERIES,type CharacterId,type WeaponId} from './content'
 export type Job='mage'|'warden'|'hunter';
 export type PathId=CharacterId|'guard'|'breaker'|'sniper'|'volley';
 export const JOBS:Record<Job,{name:string;icon:string;tip:string}>={
-  mage:{name:'法师',icon:'ϟ',tip:'选择一种法术，围绕施法条件构筑。'},
+  mage:{name:'法师',icon:'ϟ',tip:'以雷电、孢子或余火迎敌。'},
   warden:{name:'剑卫',icon:'⚔',tip:'接近敌群，用扇形斩击守住身前。'},
-  hunter:{name:'猎手',icon:'➶',tip:'保持射线，用距离或箭阵换取优势。'}
+  hunter:{name:'猎手',icon:'➶',tip:'用长弓贯穿敌列，或用散射压制近敌。'}
 };
 interface Path {job:Job; name:string; weapon:WeaponId; tip:string; mastery:{name:string;tip:string;details:string}; talent:{name:string;description:string}}
 export const PATHS:Record<PathId,Path>={

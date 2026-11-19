@@ -31,11 +31,6 @@ export const CLASS_TALENTS:Record<CharacterId,{name:string;description:string}>=
   fern:{name:'返青',description:'一次根阵开花卷入至少两个敌人时，恢复 3 点生命。'},
   ash:{name:'回火',description:'同一支焰枪穿过第二个敌人时，闪避剩余冷却缩短 1 秒。'}
 };
-export const CHARACTERS: { id:CharacterId; name:string; title:string; weapon:WeaponId; hp:number; speed:number; color:number; description:string; unlock:string }[] = [
-  {id:'hazel',name:'榛果',title:'提灯学徒',weapon:'spark',hp:100,speed:185,color:0xd89c60,description:'拾取范围 +20%\n带着一盏灯，守住森林的长夜。',unlock:'初始开放'},
-  {id:'fern',name:'蕨',title:'月林守望',weapon:'spore',hp:120,speed:175,color:0x92b695,description:'生命较高，适合贴近敌群\n让每一寸土地成为你的同伴。',unlock:'任意角色生存至 3 分钟'},
-  {id:'ash',name:'灰烬',title:'逐星旅人',weapon:'ember',hp:85,speed:205,color:0xa3b6d5,description:'移动最快，基础生命较少\n沿着余火走向黎明。',unlock:'首次击败森林首领'}
-];
 export const SYNERGIES = [
   {id:'cutwind',a:'blade',b:'leaf',name:'风刃',description:'林刃命中时，风叶额外割伤目标。每个目标有独立冷却。'},
   {id:'firearrow',a:'bow',b:'ember',name:'火箭',description:'箭矢击中敌人时点燃目标两秒。'},
@@ -45,10 +40,10 @@ export const SYNERGIES = [
 ] as const;
 export const ACHIEVEMENTS = [
   {id:'first',name:'第一缕微光',description:'完成一场守夜',reward:'记录册开放'},
-  {id:'survivor',name:'月林来客',description:'生存至 3 分钟',reward:'解锁角色：蕨'},
+  {id:'survivor',name:'月林来客',description:'生存至 3 分钟',reward:'月林纪念章'},
   {id:'hunter',name:'星轨初现',description:'累计击败 300 个敌人',reward:'解锁技能：流星'},
   {id:'synergy',name:'魔法的回响',description:'在一局中组成任意一组联动',reward:'解锁技能：霜环'},
-  {id:'dawn',name:'长夜将尽',description:'首次击败森林首领',reward:'解锁角色：灰烬'},
-  {id:'master',name:'守夜人',description:'三个角色各胜利一次',reward:'守夜人纪念徽章'}
+  {id:'dawn',name:'长夜将尽',description:'首次击败森林首领',reward:'黎明纪念章'},
+  {id:'master',name:'守夜人',description:'三个职业各胜利一次',reward:'守夜人纪念徽章'}
 ] as const;
 export const ability = (id: UpgradeId) => ABILITIES.find(a=>a.id===id)!;

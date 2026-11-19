@@ -9,7 +9,7 @@ const priorities:Record<CharacterId,UpgradeId[]>={
   ash:['ember','leaf','power','haste','vigor','spark']
 };
 function play(character:CharacterId,seed:number,path:PathId=character){
-  const s=new Combat(character,seed,'hard',path),melee=s.path.job==='warden',rank:UpgradeId[]=melee?['blade','leaf','power','haste','vigor','stride']:s.path.job==='hunter'?['bow','ember','power','haste','vigor','stride']:priorities[character];
+  const s=new Combat(path,seed,'hard'),melee=s.path.job==='warden',rank:UpgradeId[]=melee?['blade','leaf','power','haste','vigor','stride']:s.path.job==='hunter'?['bow','ember','power','haste','vigor','stride']:priorities[character];
   for(let tick=0;tick<30000&&!s.ended;tick++){
     const phase=s.seconds*.30,boss=s.boss;
     const x=s.shrine?.x??((boss?.x??900)+(boss?(melee?108:150):470)*Math.cos(phase));

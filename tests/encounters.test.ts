@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {Combat} from '../src/combat';
 const idle={x:0,y:0};
-function arena(seed=8){const s=new Combat('fern',seed,'normal','volley');s.build={};return s;}
+function arena(seed=8){const s=new Combat('volley',seed);s.build={};return s;}
 function ticks(s:Combat,n:number){for(let i=0;i<n;i++)s.step(1/60,idle);}
 describe('forest encounters',()=>{
   it.each([[8,'boar'],[9,'mothQueen']] as const)('spawns one miniboss for seed %i and keeps its death distinct from victory',(seed,kind)=>{

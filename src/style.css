@@ -84,3 +84,7 @@
 .card .mastery-tip {display:block;margin-top:5px;color:#dccf9b;font-size:.85em}
 
 #boss {width:clamp(165px,25vw,300px);pointer-events:none} #boss label{display:block;font-size:13px} #boss label+label{margin-top:4px} #boss label span{float:right} #boss meter{display:block;width:100%;height:8px;accent-color:#da8c79} #boss:not(:empty)~#objective{top:auto;bottom:16%}
+
+.job-card img{width:100%;height:clamp(66px,18dvh,132px);object-fit:contain;background:radial-gradient(ellipse at 50% 90%,#52614666,transparent 68%)}.training-row{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid #62775b;padding:10px 0}.training-row p{margin:.25em 0}.purse b{color:#f2d788}
+
+#gold {color:#f5d78e;font-size:11px;margin-right:.45em}

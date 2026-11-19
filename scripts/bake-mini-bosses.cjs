@@ -1,7 +1,5 @@
 /* Original layered woodcuts. Each frame is baked from local joint transforms.
    Run with sharp available to Node, as for bake-enemies.cjs. */
-const sharp = require('sharp');
-const path = require('node:path');
 const ink = '#25302c';
 const p = (d, fill, outline = 0) =>
   '<path d="'+d+'" fill="'+fill+'" stroke="'+(outline ? ink : 'none')+'" stroke-width="'+outline+'" stroke-linejoin="round"/>';
@@ -75,15 +73,6 @@ function moth(i){
     lines('M59 45 Q56 34 48 30 m4 2 -1 -5 m4 7 -1 -5 M69 45 Q72 34 80 30 m-4 2 1 -5 m-4 7 1 -5','#e8d2a4',1.3);
   return group('translate(0 '+(2*lift-2*prep+3*release)+')',mothWing(1,open,angle)+mothWing(-1,open,angle)+abdomen+thorax+head);
 }
-async function bake(){
-  const tiles=[];
-  for(const [index,draw] of [boar,moth].entries()){
-    for(let i=0;i<24;i++){
-      const svg='<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">'+group('translate(4 4) scale(.9375)',draw(i))+'</svg>';
-      tiles.push({input:await sharp(Buffer.from(svg)).png().toBuffer(),left:i%12*128,top:(index*2+Math.floor(i/12))*128});
-    }
-  }
-  await sharp({create:{width:1536,height:512,channels:4,background:'#0000'}}).composite(tiles)
-    .png({palette:true,colours:160,effort:9,dither:0}).toFile(path.join(__dirname,'../public/art/mini-bosses.png'));
-}
-bake().catch(e=>{console.error(e);process.exitCode=1;});
+module.exports={boar,moth,pose,group,rotate,p,lines};
+// The chief atlas now contains two damage states and the legacy tree guardian.
+if(require.main===module)require('./bake-chief-regalia.cjs');

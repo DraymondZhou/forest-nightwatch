@@ -1,5 +1,6 @@
+import {freshRanks,maxHealth,walkSpeed,coinValue,type Ranks} from './camp';
 import {PATHS,type PathId} from './stylesOfPlay';
-import { MASTERY_LEVEL, CHARACTERS, ABILITIES, type CharacterId, type UpgradeId, type WeaponId } from './content';
+import { MASTERY_LEVEL, ABILITIES, type UpgradeId, type WeaponId } from './content';
 import { upgradeChoices, Random, xpNeeded, activeSynergies, type Build, type RunSummary } from './model';
 
 
@@ -12,7 +13,7 @@ export const isChief=(kind:EnemyKind)=>kind==='boss'||kind==='boar'||kind==='mot
 export const chiefName=(kind:EnemyKind)=>kind==='boar'?'棘冠山主':kind==='mothQueen'?'月绒蛾后':'古树守卫';
 export interface Shot {id:number;x:number;y:number;vx:number;vy:number;life:number;radius:number;damage:number;weapon:WeaponId|'enemy';pierce:number;lance?:boolean; missile?:'sap'|'shard'|'seed'|'dust'; aimed?:boolean;hit:Set<number>}
 export interface Zone {id:number;x:number;y:number;radius:number;life:number;tick:number;damage:number;kind:'spore'|'ember'|'warning';timer:number;bloomed?:boolean; shape?:'disk'|'ring'|'lane'|'cleave'; angle?:number; owner?:number; duration?:number}
-export interface Drop {id:number;x:number;y:number;value:number;born:number;kind:'xp'|'heal'}
+export interface Drop {id:number;x:number;y:number;value:number;born:number;kind:'xp'|'heal'|'coin'}
 export interface Effect {kind:'impactZone'|'slash'|'bloom'|'wound'|'dash'|'evade'|'defeat'|'gather'|'strike'|'cast'|'hit'|'chain'|'burst'|'frost'|'heal'|'level'|'synergy';x:number;y:number;enemyKind?:EnemyKind;weapon?:WeaponId;tx?:number;ty?:number;radius?:number;color?:number;text?:string;shape?:Zone['shape'];arcSeed?:number;hop?:number;empowered?:boolean}
 export interface Controls {x:number;y:number;dash?:boolean}
 export interface Shrine {x:number;y:number;charge:number;expires:number}
@@ -27,7 +28,7 @@ const distance2=(a:{x:number;y:number},b:{x:number;y:number})=>(a.x-b.x)**2+(a.y
 const ENEMY_STATS:Record<EnemyKind,[number,number,number,number]>={slime:[22,48,17,9],moth:[16,86,13,7],twig:[30,105,15,10],spitter:[36,40,19,9],beetle:[74,42,24,13],brute:[440,52,38,18],crystal:[300,65,30,16],boar:[820,59,37,15],mothQueen:[670,61,32,13],boss:[5100,34,62,21]};
 
 export class Combat {
-  readonly rng:Random; readonly character; readonly seed:number;
+  readonly loot:Random; coins=0; readonly rng:Random; readonly seed:number;
   player={x:900,y:600,hp:100,maxHp:100,invincible:0,angle:0,moving:false};
   build:Build={}; enemies:Enemy[]=[];shots:Shot[]=[];zones:Zone[]=[];drops:Drop[]=[];effects:Effect[]=[];
   seconds=0;level=1;xp=0;kills=0;pendingLevels=0;ended=false;won=false;bossSpawned=false;synergySeen=false;
@@ -53,18 +54,18 @@ export class Combat {
   private nextEnemy: number[] = [];
   private shotCandidates: Enemy[] = [];
   private leafClock=0;private ticks=0;
-  constructor(characterId:CharacterId,seed:number,readonly difficulty:Difficulty='normal',readonly pathId:PathId=characterId) {
-    this.character=CHARACTERS.find(c=>c.id===characterId)!;this.seed=seed;this.rng=new Random(seed);
+  constructor(readonly pathId:PathId,seed:number,readonly difficulty:Difficulty='normal',readonly training:Ranks=freshRanks()) {
+    this.seed=seed;this.rng=new Random(seed);this.loot=new Random(seed^0x9e3779b9);this.training={...training};
     this.gridHeads.fill(-1);
-    this.player.hp=this.player.maxHp=this.character.hp;this.build[this.path.weapon]=1;
+    this.player.hp=this.player.maxHp=maxHealth(training);this.build[this.path.weapon]=1;
   }
   get rules(){return DIFFICULTIES[this.difficulty];}
-  get pickupRadius(){return (98+(this.build.reach??0)*12)*(this.character.id==='hazel'?1.2:1)+(this.harvestTime>0?145:0);}
+  get pickupRadius(){return (98+(this.build.reach??0)*12)*1.2+(this.harvestTime>0?145:0);}
   get boss() {return this.enemies.find(e=>e.kind==='boss')??this.enemies.find(e=>isChief(e.kind));}
   get power() {return (1+(this.build.power??0)*0.10)*(this.flameTime>0?1.30:1);}
   get reach() {return 1+(this.build.reach??0)*0.1;}
   get haste() {return CAST_INTERVAL[this.build.haste??0];}
-  get walkSpeed(){return this.character.speed*(1+(this.build.stride??0)*.08);}
+  get walkSpeed(){return walkSpeed(this.training)*(1+(this.build.stride??0)*.08);}
   get xpMultiplier(){return 1+(this.build.fortune??0)*.1;}
   attackInterval(weapon:WeaponId){return BASE_INTERVAL[weapon]*this.haste;}
   private nextId(){return this.id++;}
@@ -437,6 +438,12 @@ export class Combat {
       // Merge overflow XP rather than dropping rewards when a player circles the arena.
       if(this.drops.length<300)this.drops.push({id:this.nextId(),x:e.x,y:e.y,born:this.seconds,value,kind:'xp'});else {const existing=this.drops.find(d=>d.kind==='xp');if(existing)existing.value+=value;}
       if(this.drops.length<320&&(elite||this.rng.next()<0.025))this.drops.push({id:this.nextId(),x:e.x+12,y:e.y,born:this.seconds,value:elite?22:12,kind:'heal'});
+      const gold=coinValue(e.kind,this.loot.next());
+      if(gold){
+        if(e.kind==='boss')this.coins+=gold; // No pickup frame follows a final victory.
+        else {const pile=this.drops.length>=320?this.drops.find(d=>d.kind==='coin'):undefined;
+          if(pile)pile.value+=gold;else this.drops.push({id:this.nextId(),kind:'coin',x:e.x-9,y:e.y,born:this.seconds,value:gold});}
+      }
       if(e.kind==='boss'){this.won=p.hp>0;this.ended=true;}
     }
     this.enemies=this.enemies.filter(e=>e.hp>0 && (isChief(e.kind) || distance2(e,p)<1400**2));
@@ -452,7 +459,8 @@ export class Combat {
       const travel=Math.min((this.harvestTime>0?620:320)*dt,dist)/Math.max(1,dist);
       d.x+=(p.x-d.x)*travel;d.y+=(p.y-d.y)*travel;
       if(dist>22)return true;
-      if(d.kind==='heal'){p.hp=Math.min(p.maxHp,p.hp+d.value);this.effect({kind:'heal',x:p.x,y:p.y,text:`+${d.value}`});}
+      if(d.kind==='coin'){this.coins+=d.value;gathered=true;}
+      else if(d.kind==='heal'){p.hp=Math.min(p.maxHp,p.hp+d.value);this.effect({kind:'heal',x:p.x,y:p.y,text:`+${d.value}`});}
       else {this.xp+=d.value*this.xpMultiplier;gathered=true;}
       return false;
     });
@@ -462,5 +470,5 @@ export class Combat {
   resolveLevel(id?:UpgradeId|'mastery'){if(this.pendingLevels<=0)return;
     if(id==='mastery'){if(!this.offersClassTalent)return;this.classTalent=true;}
     else if(id)this.addUpgrade(id);else this.player.hp=Math.min(this.player.maxHp,this.player.hp+20);this.pendingLevels--;}
-  summary():RunSummary{return{character:this.character.id,seconds:this.seconds,kills:this.kills,won:this.won,level:this.level,synergy:this.synergySeen,seed:this.seed};}
+  summary():RunSummary{return{job:this.path.job,seconds:this.seconds,kills:this.kills,won:this.won,level:this.level,synergy:this.synergySeen,seed:this.seed};}
 }

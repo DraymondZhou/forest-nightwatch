@@ -1,3 +1,5 @@
+import {TRAINING,train,maxHealth,walkSpeed,type TrainingId} from './camp';
+import {art} from './art';
 import {JOBS,PATHS,type Job,type PathId} from './stylesOfPlay';
 import {chiefName,isChief} from './combat';
 import Phaser from 'phaser';
@@ -9,8 +11,8 @@ import { BattleHud } from './battleHud';
 import {DIFFICULTIES,readDifficulty,type Difficulty} from './difficulty';
 import { Combat } from './combat';
 import { ForestScene } from './scene';
-import { MASTERY_LEVEL, ABILITIES, ACHIEVEMENTS, CHARACTERS, SYNERGIES, ability, type CharacterId, type UpgradeId } from './content';
-import { SaveStore, characterUnlocked, finishRun, unlockedWeapons, xpNeeded } from './model';
+import { MASTERY_LEVEL, ABILITIES, ACHIEVEMENTS, SYNERGIES, ability, type UpgradeId } from './content';
+import { SaveStore, finishRun, unlockedWeapons, xpNeeded } from './model';
 
 const store = new SaveStore({
   getItem: key => localStorage.getItem(key),
@@ -18,7 +20,7 @@ const store = new SaveStore({
 });
 const audio = new AudioDirector();
 const app = document.querySelector<HTMLDivElement>('#app')!;
-app.innerHTML = '<div id="world"></div><section id="hud" hidden><div id="wound" aria-hidden="true"><svg viewBox="0 0 120 72" focusable="false"><g fill="#8c333e"><path d="M120 5c-9 1-7 9-18 10l-9 0 6 4-8 3 8 2c9 1 8 7 21 4zM120 40c-8-3-12-2-17 2l-11 2 6 4-10 7 15-3c6-2 10 4 17 2z"/><ellipse cx="81" cy="23" rx="4" ry="2"/><ellipse cx="73" cy="32" rx="2" ry="1.4"/><ellipse cx="84" cy="51" rx="3" ry="1.6"/></g></svg></div><div class="vitals"><span id="health"></span><meter id="hp"></meter><meter id="xp"></meter><small id="mastery"></small></div><b id="clock"></b><button id="pause" aria-label="暂停">Ⅱ</button><div id="skills"></div><output id="perf"></output><div id="boss"></div><div id="objective"></div><button id="dash" aria-label="闪避" title="闪避 · 空格"><span>闪避</span><small id="dash-time">就绪</small></button></section><section id="panel"></section><aside id="orientation">请旋转手机，横屏游戏</aside>';
+app.innerHTML = '<div id="world"></div><section id="hud" hidden><div id="wound" aria-hidden="true"><svg viewBox="0 0 120 72" focusable="false"><g fill="#8c333e"><path d="M120 5c-9 1-7 9-18 10l-9 0 6 4-8 3 8 2c9 1 8 7 21 4zM120 40c-8-3-12-2-17 2l-11 2 6 4-10 7 15-3c6-2 10 4 17 2z"/><ellipse cx="81" cy="23" rx="4" ry="2"/><ellipse cx="73" cy="32" rx="2" ry="1.4"/><ellipse cx="84" cy="51" rx="3" ry="1.6"/></g></svg></div><div class="vitals"><span id="health"></span><meter id="hp"></meter><meter id="xp"></meter><small id="gold"></small><small id="mastery"></small></div><b id="clock"></b><button id="pause" aria-label="暂停">Ⅱ</button><div id="skills"></div><output id="perf"></output><div id="boss"></div><div id="objective"></div><button id="dash" aria-label="闪避" title="闪避 · 空格"><span>闪避</span><small id="dash-time">就绪</small></button></section><section id="panel"></section><aside id="orientation">请旋转手机，横屏游戏</aside>';
 const el = <T extends HTMLElement = HTMLElement>(id:string) => document.getElementById(id) as T;
 const panel = el('panel'), hud = el('hud');
 const battleHud=new BattleHud();
@@ -35,30 +37,30 @@ function home() {
   page='home'; run=undefined; scene.setPaused(true); scene.sim=undefined;
   audio.combat=false; audio.paused=false;
   hud.hidden=true; panel.hidden=false; app.className='cover';
-  panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?action('select','开始游戏',true):'<button disabled>游戏加载中…</button>'}${action('journal','守夜手记')}${action('settings','设置')}</nav>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
+  panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?action('select','开始游戏',true):'<button disabled>游戏加载中…</button>'}${action('camp','营地训练')}${action('journal','守夜手记')}${action('settings','设置')}</nav>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
 }
-let chosenActor:CharacterId='hazel';
 let chosenJob:Job='mage';
-function chooseJob(actor:CharacterId){
-  if(!characterUnlocked(store.data,actor))return;
-  chosenActor=actor;page='job';
-  const cards=Object.entries(JOBS).map(([id,j])=>`<button class="card" data-action="job-${id}"><b class="rune">${j.icon}</b><strong>${j.name}</strong><span>${j.tip}</span></button>`).join('');
-  sheet('选择职业',`<p>${CHARACTERS.find(c=>c.id===actor)!.name} · ${DIFFICULTIES[store.data.settings.difficulty].label}</p><div class="cards">${cards}</div>`,action('select','返回角色'));
-}
+let banked=0;
+function bankCoins(){if(run && run.coins>banked){store.data.gold+=run.coins-banked;banked=run.coins;store.write();}}
 function choosePath(job:Job){
   chosenJob=job;page='path';
   const cards=Object.entries(PATHS).filter(([,p])=>p.job===job).map(([id,p])=>`<button class="card" data-action="path-${id}"><b class="rune">${ability(p.weapon).icon}</b><strong>${p.name}</strong><span>${p.tip}</span><small>六级 · ${p.mastery.name}</small></button>`).join('');
   sheet(JOBS[job].name+' · 选择流派',`<div class="cards">${cards}</div>`,action('back-job','返回职业'));
 }
 function select() {
-  page='select';
-  const cards=CHARACTERS.map(c=>{
-    const open=characterUnlocked(store.data,c.id);
-    return `<button class="card" data-action="play-${c.id}" ${open?'':'disabled'}><small>${c.title}</small><strong>${c.name}</strong><span>${open?c.description.split('\n')[0]:c.unlock}</span><small>生命 ${c.hp}　速度 ${c.speed/10} 步/秒</small></button>`;
-  }).join('');
+  page='job';
+  const cards=Object.entries(JOBS).map(([id,j])=>`<button class="card job-card" data-action="job-${id}"><img alt="" src="${art('job-'+id+'.png')}"><strong>${j.name}</strong><span>${j.tip}</span></button>`).join('');
   const difficulty=store.data.settings.difficulty;
   const modes=(Object.keys(DIFFICULTIES) as Difficulty[]).map(id=>`<label><input type="radio" name="difficulty" data-key="difficulty" value="${id}" ${id===difficulty?'checked':''}><span>${DIFFICULTIES[id].label}</span></label>`).join('');
-  sheet('选择角色',`<fieldset class="difficulty"><legend>本局难度</legend>${modes}</fieldset><p id="mode-hint" aria-live="polite">${DIFFICULTIES[difficulty].description}</p><div class="cards">${cards}</div><p>方向键或左侧摇杆移动，自动攻击。空格或右侧按钮可闪避，擦过攻击时会吸引附近种荚。甲虫的护甲能抵挡范围冲击，直击和持续伤害有效。三分钟迎战小首领，六分钟迎战古树守卫。</p>`,action('home','返回'));
+  sheet('选择职业',`<fieldset class="difficulty"><legend>本局难度</legend>${modes}</fieldset><p id="mode-hint" aria-live="polite">${DIFFICULTIES[difficulty].description}</p><div class="cards">${cards}</div><p>方向键或左侧摇杆移动，自动攻击。空格或右侧按钮闪避。三分钟迎战小首领，六分钟迎战古树守卫。</p>`,action('home','返回'));
+}
+function camp(){
+  page='camp';const save=store.data;
+  const rows=(Object.keys(TRAINING) as TrainingId[]).map(k=>{
+    const t=TRAINING[k],rank=save.training[k],cost=t.cost[rank],value=k==='health'?maxHealth(save.training):walkSpeed(save.training)/10;
+    return `<div class="training-row"><div><strong>${t.name}</strong>　<small>${rank}/5</small><p>${value} ${t.unit}${cost===undefined?' · 已满级':' → '+(value+t.step)+' '+t.unit}</p></div><button data-action="train-${k}" ${cost===undefined||save.gold<cost?'disabled':''}>${cost===undefined?'已满级':cost+' 金币'}</button></div>`;
+  }).join('');
+  sheet('营地训练',`<p class="purse">持有金币　<b>${save.gold}</b></p><p>训练对所有职业永久生效。普通怪有机会掉金币，精英掉率更高，首领必掉。拾取后即存入营地。</p>${rows}<small>${store.warning}</small>`,action('home','返回'));
 }
 function journal() {
   page='journal';
@@ -75,9 +77,10 @@ function settings() {
   };
 }
 function syncAudio(){audio.music=store.data.settings.music;audio.sound=store.data.settings.sound;}
-function start(id:CharacterId,path:PathId) {
-  if(!ready||!characterUnlocked(store.data,id))return;
-  run=new Combat(id,crypto.getRandomValues(new Uint32Array(1))[0],store.data.settings.difficulty,path);page='battle';app.className='';
+function start(path:PathId) {
+  banked=0;
+  if(!ready)return;
+  run=new Combat(path,crypto.getRandomValues(new Uint32Array(1))[0],store.data.settings.difficulty,store.data.training);page='battle';app.className='';
   panel.hidden=true;hud.hidden=false;audio.combat=true;audio.paused=false;
   battleHud.reset(store.data.settings.quality==='low');scene.begin(run);if(portrait.matches)pause();
 }
@@ -125,19 +128,20 @@ function upgrade(){
 function end(){
   if(!run||page==='result')return;
   run.ended=true;scene.setPaused(true);audio.paused=false;audio.play(run.won?'win':'lose');
-  const gained=finishRun(store.data,run.summary());store.write();page='result';
+  bankCoins();const gained=finishRun(store.data,run.summary());store.write();page='result';
   const leading=Object.entries(run.damageByWeapon).sort((a,b)=>b[1]-a[1])[0];
   const tactics='点亮林灯 '+run.shrinesLit+' 座　·　成功闪避 '+run.dodges+' 次'+(leading?'　·　主力技能 '+ability(leading[0] as UpgradeId).name:'');
-  lastSummary=`<p>${run.character.name} · ${JOBS[run.path.job].name} · ${run.path.name}　·　${run.rules.label}　·　守夜 ${clock(run.seconds)}　·　击败 ${run.kills}　·　等级 ${run.level}</p><p>${tactics}</p><p>${ABILITIES.filter(a=>run!.build[a.id]).map(a=>a.name+' '+run!.build[a.id]).join('　')}</p>${gained.map(id=>`<p>✦ ${ACHIEVEMENTS.find(a=>a.id===id)!.name}</p>`).join('')}<small>${store.warning}</small>`;
-  hud.hidden=true;sheet(run.won?'黎明已至':'守夜结束',lastSummary,action('again','再来一局',true)+action('home','返回主菜单'));
+  lastSummary=`<p>${JOBS[run.path.job].name} · ${run.path.name}　·　${run.rules.label}　·　守夜 ${clock(run.seconds)}　·　击败 ${run.kills}　·　等级 ${run.level}</p><p>本局金币 +${run.coins}　·　营地余额 ${store.data.gold}</p><p>${tactics}</p><p>${ABILITIES.filter(a=>run!.build[a.id]).map(a=>a.name+' '+run!.build[a.id]).join('　')}</p>${gained.map(id=>`<p>✦ ${ACHIEVEMENTS.find(a=>a.id===id)!.name}</p>`).join('')}<small>${store.warning}</small>`;
+  hud.hidden=true;sheet(run.won?'黎明已至':'守夜结束',lastSummary,action('again','再来一局',true)+action('camp','营地训练')+action('home','返回主菜单'));
 }
 let shownSkills='',shownBosses='';
 function updateHealth(s:Combat){
-  el('health').textContent=`${s.character.name}　${Math.ceil(s.player.hp)} / ${s.player.maxHp}　 Lv.${s.level}`;
+  el('health').textContent=`${JOBS[s.path.job].name}　${Math.ceil(s.player.hp)} / ${s.player.maxHp}　 Lv.${s.level}`;
   el<HTMLMeterElement>('hp').value=s.player.hp/s.player.maxHp;
 }
 function updateHud(s:Combat,stats:FrameStats) {
-  battleHud.update(s);updateHealth(s);
+  bankCoins();battleHud.update(s);updateHealth(s);
+  const purse='金币 '+s.coins;if(el('gold').textContent!==purse)el('gold').textContent=purse;
   const mastery=el('mastery');
   const status=!s.masteryActive?'':s.pathId==='hazel'?'游雷 · '+Math.floor(s.stormCharge*100)+'%':
     s.pathId==='ash'?(s.dashCooldown<=0?'焰枪 · 就绪':'焰枪 · 冷却'):
@@ -157,10 +161,11 @@ panel.onclick=e=>{
   const id=btn.dataset.action!;void audio.start().catch(()=>{});audio.play('click');
   if(id==='home')home();else if(id==='select'||id==='again'){home();select();}else if(id==='journal')journal();else if(id==='settings')settings();
   else if(id==='resume')resume();else if(id==='pause')pause();else if(id==='retreat')end();
-  else if(page==='select'&&id.startsWith('play-'))chooseJob(id.slice(5) as CharacterId);
+  else if(id==='camp')camp();
+  else if(page==='camp' && (id==='train-health'||id==='train-speed')){if(train(store.data,id==='train-health'?'health':'speed'))store.write();camp();}
   else if(page==='job'&&id.startsWith('job-'))choosePath(id.slice(4) as Job);
-  else if(page==='path'&&id==='back-job')chooseJob(chosenActor);
-  else if(page==='path'&&id.startsWith('path-')){const path=id.slice(5) as PathId;if(PATHS[path]?.job===chosenJob)start(chosenActor,path);}
+  else if(page==='path'&&id==='back-job')select();
+  else if(page==='path'&&id.startsWith('path-')){const path=id.slice(5) as PathId;if(PATHS[path]?.job===chosenJob)start(path);}
   else if((id==='gift-flame'||id==='gift-spring')&&run&&page==='gift'){run.takeGift(id==='gift-flame'?'flame':'spring');afterChoice();}
   else if(id.startsWith('take-')&&run&&page==='upgrade'){run.resolveLevel(id==='take-heal'?undefined:id.slice(5) as UpgradeId|'mastery');afterChoice();}
   else if(id==='import')el('import').click();
@@ -168,7 +173,7 @@ panel.onclick=e=>{
 };
 panel.oninput=e=>{
   const input=e.target as HTMLInputElement;const key=input.dataset.key;
-  if(key==='difficulty' && page==='select'){
+  if(key==='difficulty' && page==='job'){
     const difficulty=readDifficulty(input.value);store.data.settings.difficulty=difficulty;store.write();
     el('mode-hint').textContent=DIFFICULTIES[difficulty].description;return;
   }
@@ -188,10 +193,11 @@ panel.oninput=e=>{
 };
 const portrait=matchMedia('(orientation: portrait) and (pointer: coarse)');
 portrait.addEventListener('change',()=>{if(portrait.matches&&page==='battle')pause();});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){audio.paused=true;if(page==='battle')pause();}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){bankCoins();audio.paused=true;if(page==='battle')pause();}});
 el('pause').onclick=pause;
 el('dash').onpointerdown=e=>{if(page==='battle'){e.preventDefault();scene.requestDash();}};
 el('dash').onclick=e=>{if(e.detail===0 && page==='battle')scene.requestDash();};
+window.addEventListener('pagehide',bankCoins);
 const scene=new ForestScene({audio,tick:updateHud,health:updateHealth,showFps:()=>store.data.settings.showFps,upgrade,end,pause,gift:chooseGift,wound:(x,y,low)=>battleHud.wound(x,y,low), lowQuality:()=>store.data.settings.quality==='low',showEnemyHealth:()=>store.data.settings.showEnemyHealth,showEnemyHealthNumbers:()=>store.data.settings.showEnemyHealthNumbers,
   ready:()=>{if(!assetError){ready=true;home();}},
   error:message=>{assetError=true;sheet('森林载入失败',`<p>${message}</p>`,'<button id="reload">重新加载</button>');el('reload').onclick=()=>location.reload();}

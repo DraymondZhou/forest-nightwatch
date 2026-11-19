@@ -1,10 +1,12 @@
 # 森光守夜 · Forest Nightwatch
 
-**当前版本：v1.9.0 · 职业与首领战**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.9.0) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.9.0/Forest-Nightwatch-v1.9.0.html)
+**当前版本：v1.10.0 · 职业造型与营地训练**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.10.0) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.10.0/Forest-Nightwatch-v1.10.0.html)
 
-《森光守夜》是一款支持手机横屏和电脑浏览器的森林生存肉鸽。先选角色，再定职业和流派：法师靠雷电、孢子或余火控制战场；剑卫用盾反或重斩近身作战；猎手用穿杨或散射调整交战距离。
+《森光守夜》是一款支持手机横屏和电脑浏览器的森林生存肉鸽。先选职业，再选流派：法师靠雷电、孢子或余火控制战场；剑卫用盾反或重斩近身作战；猎手用穿杨或散射调整交战距离。
 
 每局第 3 分钟迎战棘冠山主或月绒蛾后，第 6 分钟迎战古树守卫。观察冲撞路线、挥砍扇面和蛾粉环带来闪避；同时在场的首领分别显示血条。
+
+普通怪有 12% 概率掉 1 金币；精英有 65% 概率掉 3 金币；小首领必掉 12 金币，最终首领必得 25 金币，随胜利自动结算。已拾取的金币在死亡或主动结束后保留。在主菜单的「营地训练」永久提升全职业的生命或移速，每项最多五级，局内祝福每局重新选择。
 
 ## 开发
 
@@ -21,8 +23,8 @@ npm run build
 
 ## 约定
 
-- 先选角色，再选职业和流派。法师有雷行、孢庭、余火，剑卫有盾反、重斩，猎手有穿杨、散射。六级开启流派专精，九级起可抽到流派天赋。
-- 在选角页选择简单、标准或困难，默认标准。难度会被记住并在每局开始时锁定，暂停和结算可查看。
+- 开局直接选职业，再定流派。法师有雷行、孢庭、余火，剑卫有盾反、重斩，猎手有穿杨、散射。六级开启流派专精，九级起可抽到流派天赋。
+- 在职业页选择简单、标准或困难，默认标准。难度会被记住并在每局开始时锁定，暂停和结算可查看。
 - 飞蛾可用群攻快速清除，甲虫能吸收 52% 的范围冲击。对付甲虫时可用余烬直击、持续灼烧、月孢或流星穿透。
 
 - WASD / 方向键移动；触屏使用左侧虚拟摇杆。自动攻击。按 Esc 或点击暂停可查看本局天赋、技能联动与当前数值。空格或右侧「闪避」可闪避；险避成功会吸引附近的经验种荚。
@@ -34,7 +36,7 @@ npm run build
 
 ## 资源与许可
 
-棘冠山主和月绒蛾后的动作图集由本项目的 `scripts/bake-mini-bosses.cjs` 绘制，每只含 24 帧；不同敌种的树脂弹、晶片、蛾粉和树种由 `src/encounterInk.ts` 绘制。
+剑卫和猎手的独立动作图集由 `scripts/bake-martial.cjs` 烘焙，每份含 36 帧。三只首领沿用原造型绘制正常和受损两套动作，每只共 48 帧，见 `scripts/bake-mini-bosses.cjs` 和 `scripts/bake-chief-regalia.cjs`；不同敌种的树脂弹、晶片、蛾粉和树种由 `src/encounterInk.ts` 绘制。
 
 星雷命中图集 `public/art/storm-impact.png` 改编自 13rice 的 *Radial lightning effect*。本作裁取六帧，并为普通和满电攻击分别着色。原素材采用 CC0。[作者及原图](https://opengameart.org/content/radial-lightning-effect) · [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
 

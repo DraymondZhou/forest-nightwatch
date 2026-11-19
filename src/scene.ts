@@ -1,4 +1,4 @@
-import {drawMelee,drawEquipment,drawWarning,drawArrow,drawEnemyMissile} from './encounterInk';
+import {drawMelee,drawWarning,drawArrow,drawEnemyMissile} from './encounterInk';
 import Phaser from 'phaser';
 import {drawLightning,shapeLightning,stormImpactFrame} from './lightning';
 import {FrameStats} from './frameStats';
@@ -14,16 +14,17 @@ import { PickupSprites } from './pickups';
 import { Woodland } from './terrain';
 import { art } from './art';
 import {WitchRig} from './rig';
+import {MartialRig} from './martialRig';
 import type {AudioDirector} from './audio';
 
-const enemyTexture=(kind:string)=>kind==='boar'||kind==='mothQueen'?'mini-bosses':'enemies';
+const enemyTexture=(kind:string)=>kind==='boar'||kind==='mothQueen'||kind==='boss'?'mini-bosses':'enemies';
 const TINT:Record<string,number>={spark:0xa0ecdf,spore:0xc4d599,leaf:0xe2d79b,ember:0xf2b17a,frost:0xb8d9ef,comet:0xd2b0e5,enemy:0xf29483};
 type VisualEffect=Effect&{life:number;max:number;fromWand?:boolean;arc?:ReturnType<typeof shapeLightning>};
 export interface SceneHooks {tick:(sim:Combat,stats:FrameStats)=>void;health:(sim:Combat)=>void;showFps:()=>boolean;upgrade:()=>void;gift:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean;showEnemyHealth:()=>boolean;showEnemyHealthNumbers:()=>boolean}
 export class ForestScene extends Phaser.Scene {
   sim?:Combat;running=false;private hooks:SceneHooks;
   private woods!:Woodland;private worldInk!:Phaser.GameObjects.Graphics;private fxInk!:Phaser.GameObjects.Graphics;
-  private rig?:WitchRig;private sprites=new Map<number,Phaser.GameObjects.Image>();private spritePool:Phaser.GameObjects.Image[]=[];
+  private rig?:WitchRig|MartialRig;private sprites=new Map<number,Phaser.GameObjects.Image>();private spritePool:Phaser.GameObjects.Image[]=[];
   private fieldMarks!:InkMarks;private hitMarks!:InkMarks;private stormMarks!:InkMarks;private dashQueued=false;
   private health!:EnemyHealth;
   private pickups!: PickupSprites;
@@ -39,10 +40,12 @@ export class ForestScene extends Phaser.Scene {
   private stick?:{id:number;x:number;y:number};private movement={x:0,y:0};private stickInk!:Phaser.GameObjects.Graphics;
   constructor(hooks:SceneHooks){super('forest');this.hooks=hooks;}
   preload(){
+    this.load.spritesheet('martial-heroes',art('martial-heroes.png'),{frameWidth:128,frameHeight:128});
     this.load.atlas('hurt-faces',art('hurt-faces.png'),hurtFaces);
     this.load.spritesheet('mini-bosses',art('mini-bosses.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('field',art('field-marks.png'),{frameWidth:96,frameHeight:96});
     this.load.spritesheet('storm-impact',art('storm-impact.png'),{frameWidth:64,frameHeight:64});
+    this.load.image('coin',art('coin.svg'));
     this.load.spritesheet('pickups',art('pickups.png'),{frameWidth:64,frameHeight:64});
     this.load.image('ground',art('woodcut-ground.webp'));this.load.image('props',art('woodcut-props.png'));this.load.spritesheet('enemies',art('enemy-poses.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('grip',art('grip-parts.png'),{frameWidth:128,frameHeight:128});
@@ -113,7 +116,7 @@ export class ForestScene extends Phaser.Scene {
     this.lastGather=-1;this.stickState='';
     this.sim=sim;this.accumulator=0;this.uiClock=0;this.frameStats.reset();this.effects=[];
     this.sprites.forEach(s=>{s.setVisible(false);this.spritePool.push(s)});this.sprites.clear();this.texts.forEach(t=>t.setVisible(false));
-    this.rig?.destroy();this.rig=new WitchRig(this,sim.character.id==='hazel'?0xffffff:sim.character.id==='fern'?0x9ed7ba:0xc8b5ed,sim.path.job==='mage');this.running=true;
+    this.rig?.destroy();this.rig=sim.path.job==='mage'?new WitchRig(this,0xffffff):new MartialRig(this,sim.path.job);this.running=true;
     this.rig.update(0,false,0,false,0);
     this.rig.root.setPosition(sim.player.x,sim.player.y).setDepth(1000);this.cameras.main.centerOn(sim.player.x,sim.player.y);
     this.cameras.main.startFollow(this.rig.root,true,.12,.12);this.cameras.main.setZoom(1);
@@ -153,7 +156,7 @@ export class ForestScene extends Phaser.Scene {
       }
       if(effect.kind==='dash'||effect.kind==='evade')this.hooks.audio.play(effect.kind);
       if(effect.kind==='cast'){
-        this.rig!.cast(effect.tx!-effect.x,effect.ty!-effect.y);
+        if(this.sim!.path.job==='mage' || effect.weapon===this.sim!.path.weapon)this.rig!.cast(effect.tx!-effect.x,effect.ty!-effect.y);
         if(this.effects.length<100)this.effects.push({...effect,life:.105,max:.105});
         continue;
       }
@@ -198,7 +201,7 @@ export class ForestScene extends Phaser.Scene {
     const angle=effect.tx??0;
     r.x=effect.x;r.y=effect.y-10;r.age=0;r.size=(effect.radius??17)*3.5*1.16;
     r.dx=Math.cos(angle)*15;r.dy=Math.sin(angle)*10;
-    r.sprite.setTexture(enemyTexture(effect.enemyKind),enemyRestFrame(effect.enemyKind)).setFlipX(effect.x>this.sim!.player.x)
+    r.sprite.setTexture(enemyTexture(effect.enemyKind),enemyRestFrame(effect.enemyKind)+(enemyTexture(effect.enemyKind)==='mini-bosses'?72:0)).setFlipX(effect.x>this.sim!.player.x)
       .setDepth(998).setVisible(true);
   }
   private drawRemains(dt:number) {
@@ -353,8 +356,6 @@ export class ForestScene extends Phaser.Scene {
         const frame=stormImpactFrame(age,charged);
         if(frame>=0)this.stormMarks.paint(frame,e.tx!,e.ty!,charged?53:33,e.arc.angle);
       }else{g.strokeCircle(e.x,e.y,(e.radius??40)*(1-alpha*.65));} }
-    const sim=this.sim!;
-    if(sim.path.job!=='mage')drawEquipment(g,sim.player.x,sim.player.y-3,sim.weaponMotion?sim.weaponAngle:sim.player.angle,sim.path.job,sim.weaponMotion);
     this.hitMarks.end();this.stormMarks.end();this.effects=this.effects.filter(e=>e.life>0);}
   private drawStick(){const g=this.stickInk;
     const state=this.stick?[this.stick.x,this.stick.y,this.movement.x,this.movement.y].join(','):'idle';

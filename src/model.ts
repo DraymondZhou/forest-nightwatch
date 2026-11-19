@@ -1,3 +1,5 @@
+import type {Job} from './stylesOfPlay';
+import {freshRanks,readPurse,type Purse} from './camp';
 import { readDifficulty,type Difficulty } from './difficulty';
 import { ABILITIES, SYNERGIES, type UpgradeId, type CharacterId } from './content';
 export type Build = Partial<Record<UpgradeId,number>>;
@@ -27,31 +29,31 @@ export function upgradeChoices(build:Build, unlocked:string[], rng:Random):Upgra
 export const activeSynergies=(build:Build)=>SYNERGIES.filter(s=>(build[s.a]??0)>0&&(build[s.b]??0)>0);
 export const xpNeeded=(level:number)=>Math.round(9+level*3.8+level*level*0.12);
 export const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n));
-export interface RunSummary { character:CharacterId; seconds:number; kills:number; won:boolean; level:number; synergy:boolean; seed:number }
-export interface Save {
-  version:1; runs:number; kills:number; bestTime:number; wins:CharacterId[]; achievements:string[];
+export interface RunSummary { job:Job; seconds:number; kills:number; won:boolean; level:number; synergy:boolean; seed:number }
+export interface Save extends Purse {
+  version:1; runs:number; kills:number; bestTime:number; wins:CharacterId[]; jobWins:Job[]; achievements:string[];
   settings:{difficulty:Difficulty;music:number;sound:number;quality:'high'|'low';showFps:boolean;showEnemyHealth:boolean;showEnemyHealthNumbers:boolean};
 }
-export const newSave=():Save=>({version:1,runs:0,kills:0,bestTime:0,wins:[],achievements:[],settings:{difficulty:'normal',music:0.3,sound:0.5,quality:'high',showFps:false,showEnemyHealth:true,showEnemyHealthNumbers:false}});
+export const newSave=():Save=>({gold:0,training:freshRanks(),version:1,runs:0,kills:0,bestTime:0,wins:[],jobWins:[],achievements:[],settings:{difficulty:'normal',music:0.3,sound:0.5,quality:'high',showFps:false,showEnemyHealth:true,showEnemyHealthNumbers:false}});
 export function parseSave(value:unknown):Save {
   if(!value||typeof value!=='object') throw new Error('存档格式无效');
   const s=value as Save;
   if(s.version!==1) throw new Error('不支持此存档版本');
   for(const key of ['runs','kills','bestTime'] as const) if(!Number.isFinite(s[key])||s[key]<0||s[key]>1e9) throw new Error('存档数值无效');
   if(!Array.isArray(s.wins)||!s.wins.every(id=>['hazel','fern','ash'].includes(id))) throw new Error('角色记录无效');
+  if(s.jobWins!==undefined && (!Array.isArray(s.jobWins)||!s.jobWins.every(j=>['mage','warden','hunter'].includes(j))))throw Error('职业记录无效');
   if(!Array.isArray(s.achievements)||!s.achievements.every(id=>['first','survivor','hunter','synergy','dawn','master'].includes(id))) throw new Error('成就记录无效');
   if(!s.settings||!Number.isFinite(s.settings.music)||!Number.isFinite(s.settings.sound)) throw new Error('设置无效');
-  return {version:1,runs:Math.floor(s.runs),kills:Math.floor(s.kills),bestTime:Math.min(480,s.bestTime),wins:[...new Set(s.wins)],achievements:[...new Set(s.achievements)],settings:{difficulty:readDifficulty(s.settings.difficulty),music:clamp(s.settings.music,0,1),sound:clamp(s.settings.sound,0,1),quality:s.settings.quality==='low'?'low':'high',showFps:s.settings.showFps===true,showEnemyHealth:s.settings.showEnemyHealth!==false,showEnemyHealthNumbers:s.settings.showEnemyHealthNumbers===true}};
+  return {...readPurse(s),version:1,runs:Math.floor(s.runs),kills:Math.floor(s.kills),bestTime:Math.min(480,s.bestTime),wins:[...new Set(s.wins)],jobWins:[...new Set(s.jobWins??[])],achievements:[...new Set(s.achievements)],settings:{difficulty:readDifficulty(s.settings.difficulty),music:clamp(s.settings.music,0,1),sound:clamp(s.settings.sound,0,1),quality:s.settings.quality==='low'?'low':'high',showFps:s.settings.showFps===true,showEnemyHealth:s.settings.showEnemyHealth!==false,showEnemyHealthNumbers:s.settings.showEnemyHealthNumbers===true}};
 }
 export function finishRun(save:Save,run:RunSummary):string[] {
   const before=new Set(save.achievements); save.runs++; save.kills+=run.kills; save.bestTime=Math.max(save.bestTime,run.seconds);
-  if(run.won&&!save.wins.includes(run.character)) save.wins.push(run.character);
+  if(run.won&&!save.jobWins.includes(run.job)) save.jobWins.push(run.job);
   const unlock=(id:string,condition:boolean)=>{if(condition&&!save.achievements.includes(id))save.achievements.push(id)};
-  unlock('first',true); unlock('survivor',run.seconds>=180); unlock('hunter',save.kills>=300); unlock('synergy',run.synergy); unlock('dawn',run.won); unlock('master',save.wins.length===3);
+  unlock('first',true); unlock('survivor',run.seconds>=180); unlock('hunter',save.kills>=300); unlock('synergy',run.synergy); unlock('dawn',run.won); unlock('master',save.jobWins.length===3);
   return save.achievements.filter(a=>!before.has(a));
 }
 export const unlockedWeapons=(save:Save)=>['spark','spore','leaf','ember',...(save.achievements.includes('hunter')?['comet']:[]),...(save.achievements.includes('synergy')?['frost']:[])];
-export const characterUnlocked=(save:Save,id:CharacterId)=>id==='hazel'||save.achievements.includes(id==='fern'?'survivor':'dawn');
 export class SaveStore {
   readonly key='forest-nightwatch-v1'; warning=''; data:Save;
   constructor(private storage:Pick<Storage,'getItem'|'setItem'>) {
