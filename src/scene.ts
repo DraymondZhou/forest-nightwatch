@@ -23,7 +23,7 @@ type VisualEffect=Effect&{life:number;max:number;fromWand?:boolean;arc?:ReturnTy
 export interface SceneHooks {tick:(sim:Combat,stats:FrameStats)=>void;health:(sim:Combat)=>void;showFps:()=>boolean;upgrade:()=>void;gift:()=>void;relic:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean;showEnemyHealth:()=>boolean;showEnemyHealthNumbers:()=>boolean}
 export class ForestScene extends Phaser.Scene {
   sim?:Combat;running=false;private hooks:SceneHooks;
-  private woods!:Woodland;private worldInk!:Phaser.GameObjects.Graphics;private fxInk!:Phaser.GameObjects.Graphics;
+  private woods!:Woodland;private warningInk!:Phaser.GameObjects.Graphics;private worldInk!:Phaser.GameObjects.Graphics;private fxInk!:Phaser.GameObjects.Graphics;
   private rig?:WitchRig|MartialRig;private sprites=new Map<number,Phaser.GameObjects.Image>();private spritePool:Phaser.GameObjects.Image[]=[];
   private jobField!:InkMarks;private jobHits!:InkMarks;private fieldMarks!:InkMarks;private hitMarks!:InkMarks;private stormMarks!:InkMarks;private dashQueued=false;
   private health!:EnemyHealth;
@@ -64,7 +64,7 @@ export class ForestScene extends Phaser.Scene {
     this.health=new EnemyHealth(this);
     this.woundText=this.add.bitmapText(0,0,HEALTH_FONT,'',14).setTint(0xffa59c).setDepth(6000).setVisible(false);
     this.woods=new Woodland(this);this.pickups=new PickupSprites(this);
-    this.worldInk=this.add.graphics().setDepth(-1);this.fxInk=this.add.graphics().setDepth(5000);this.stickInk=this.add.graphics().setScrollFactor(0).setDepth(10000);
+    this.warningInk=this.add.graphics().setDepth(3);this.worldInk=this.add.graphics().setDepth(-1);this.fxInk=this.add.graphics().setDepth(5000);this.stickInk=this.add.graphics().setScrollFactor(0).setDepth(10000);
     for(let i=0;i<28;i++)this.texts.push(this.add.text(0,0,'',{fontFamily:'Georgia, serif',fontSize:'17px',color:'#f4dfb4',stroke:'#15332d',strokeThickness:3}).setDepth(6000).setVisible(false));
 
     this.keys=this.input.keyboard?.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT') as Record<string,Phaser.Input.Keyboard.Key>;
@@ -115,7 +115,7 @@ export class ForestScene extends Phaser.Scene {
     this.dashQueued=false;
     for(const r of this.remains){r.age=1;r.sprite.setVisible(false);}
     this.tweens.killTweensOf(this.woundText);this.woundText.setVisible(false);
-    this.fxInk.clear();this.worldInk.clear();this.health.begin();this.health.end();
+    this.fxInk.clear();this.worldInk.clear();this.warningInk.clear();this.health.begin();this.health.end();
     this.lastGather=-1;this.stickState='';
     this.sim=sim;this.previousX=sim.player.x;this.previousY=sim.player.y;this.accumulator=0;this.uiClock=0;this.frameStats.reset();this.effects=[];
     this.sprites.forEach(s=>{s.setVisible(false);this.spritePool.push(s)});this.sprites.clear();this.texts.forEach(t=>t.setVisible(false));
@@ -228,7 +228,7 @@ export class ForestScene extends Phaser.Scene {
   refreshEnemyHealth(){if(this.sim&&!this.running)this.drawWorld();}
   private drawWorld(){
     const showHealth=this.hooks.showEnemyHealth(),showNumbers=showHealth && this.hooks.showEnemyHealthNumbers();this.health.begin();
-    const sim=this.sim!,g=this.worldInk;g.clear();this.fieldMarks.begin();this.jobField.begin();
+    const sim=this.sim!,g=this.worldInk;g.clear();this.warningInk.clear();this.fieldMarks.begin();this.jobField.begin();
     const view=this.cameras.main.worldView;
     const visible=(x:number,y:number,margin:number)=>x>=view.left-margin && x<=view.right+margin && y>=view.top-margin && y<=view.bottom+margin;
     if(sim.shrine){
@@ -240,7 +240,7 @@ export class ForestScene extends Phaser.Scene {
     }
     for(const z of sim.zones){
       if(!visible(z.x,z.y,z.radius))continue;
-      if(z.kind==='warning'){drawWarning(g,z.x,z.y,z.radius,z.shape??'disk',z.angle??0,z.timer/(z.duration??1.3));}
+      if(z.kind==='warning'){drawWarning(this.warningInk,z.x,z.y,z.radius,z.shape??'disk',z.angle??0,z.timer/(z.duration??1.3));}
       else{
         if(z.kind==='spore' && sim.pathId==='fern' && sim.masteryActive && !z.bloomed){
           const size=Math.min(1,z.timer);

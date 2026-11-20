@@ -4,6 +4,28 @@ const idle={x:0,y:0};
 function arena(seed=8){const s=new Combat('volley',seed);s.build={};return s;}
 function ticks(s:Combat,n:number){for(let i=0;i<n;i++)s.step(1/60,idle);}
 describe('forest encounters',()=>{
+  it.each([0,8])('alternates charge lanes and staggered volleys for seed %i',seed=>{
+    const s=new Combat('volley',seed,'hard');s.build={};
+    for(const [second,count] of [[135,3],[285,4]]){
+      s.miniSpawned=true;s.enemies=[];s.zones=[];s.seconds=second-.01;
+      ticks(s,1);
+      if(s.waveHint.startsWith('甲虫')){
+        const lanes=s.zones.filter(z=>z.shape==='lane');expect(lanes).toHaveLength(count);
+        expect(new Set(lanes.map(z=>z.angle)).size).toBe(1);
+        expect(lanes.every(z=>z.life>1)).toBe(true);
+      }else{
+        expect(s.waveHint).toContain('树脂');
+        const shooters=s.enemies.filter(e=>e.kind==='spitter');
+        expect(shooters).toHaveLength(count);
+        expect(shooters[1].clock-shooters[0].clock).toBeCloseTo(.23);
+      }
+      expect(s.waveHint.startsWith('甲虫')).toBe((seed===0)===(second===135));
+    }
+  });
+  it('skips the second formation while a miniboss is alive',()=>{
+    const s=arena();s.spawn('mothQueen');s.seconds=284.99;s.miniSpawned=true;
+    ticks(s,2);expect(s.waveHint).toBe('');expect(s.zones).toHaveLength(0);
+  });
   it.each([[8,'boar'],[9,'mothQueen']] as const)('spawns one miniboss for seed %i and keeps its death distinct from victory',(seed,kind)=>{
     const s=arena(seed);s.seconds=179.99;ticks(s,2);expect(s.enemies.filter(e=>e.kind===kind)).toHaveLength(1);
     s.seconds=359.99;ticks(s,2);expect(s.enemies.filter(e=>e.kind===kind)).toHaveLength(1);expect(s.boss?.kind).toBe('boss');

@@ -167,7 +167,8 @@ function updateHud(s:Combat,stats:FrameStats) {
     s.path.job!=='mage'?(s.counterReady?'反击就绪':s.path.mastery.name):
     (s.zones.some(z=>z.kind==='spore' && z.timer>=1 && !z.bloomed)?'根阵 · 可开花':'根阵 · 育孢');
   const readout=s.relic==='stillglass'&&s.focus>=1?[status,'透镜已聚焦'].filter(Boolean).join(' · '):status;
-  if(mastery.textContent!==readout)mastery.textContent=readout;
+  const hint=s.waveHint||readout;
+  if(mastery.textContent!==hint)mastery.textContent=hint;
   el<HTMLMeterElement>('xp').value=s.xp/xpNeeded(s.level);
   el('clock').textContent=clock(s.seconds);el('perf').textContent=store.data.settings.showFps?`实际 ${Math.round(stats.current)||"—"} · 平均 ${Math.round(stats.average)||"—"} · 1% Low ${Math.round(stats.low)||"—"} FPS`:'';
   const relicIcon=s.relic?`<img class="hud-relic" src="${art('relic-'+s.relic+'.png')}" alt="${RELICS[s.relic].name}" title="${RELICS[s.relic].name}">`:'';

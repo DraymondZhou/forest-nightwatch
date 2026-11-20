@@ -1,8 +1,10 @@
 # 森光守夜 · Forest Nightwatch
 
-**当前版本：v1.13.0 · 职业遗物与战斗复盘**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.13.0) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.13.0/Forest-Nightwatch-v1.13.0.html)
+**当前版本：v1.14.0 · 林间怪阵**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.14.0) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.14.0/Forest-Nightwatch-v1.14.0.html)
 
 《森光守夜》是一款支持手机横屏和电脑浏览器的森林生存肉鸽。先选职业，再选流派：法师靠雷电、孢子或余火控制战场；剑卫用盾反或重斩近身作战；猎手用穿杨或散射调整交战距离。
+
+2:15 和 4:45 可能遭遇甲虫冲阵或树脂弹阵。甲虫锁定直线后横移，树脂弹从一侧依次射来。若小首领仍在场，跳过第二阵。
 
 每局第 3 分钟迎战棘冠山主或月绒蛾后，第 6 分钟迎战古树守卫。观察冲撞路线、挥砍扇面和蛾粉环带来闪避；同时在场的首领分别显示血条。
 

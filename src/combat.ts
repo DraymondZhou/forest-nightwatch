@@ -38,6 +38,7 @@ export class Combat {
   dashCooldown=0; dashTime=0; dashAngle=0; dodges=0; shrinesLit=0;
   shrine?:Shrine; giftPending=false; flameTime=0;
   miniSpawned=false; counterReady=false; swings=0; weaponAngle=0; weaponMotion=0;
+  waveHint=''; private waveHintUntil=0;
   relicPending=false;relic?:RelicId;rerolls=1;focus=0;
   takeRelic(id:RelicId){
     if(!this.relicPending||this.ended||this.relic||RELICS[id]?.job!==this.path.job)return false;
@@ -121,12 +122,12 @@ export class Combat {
   private nearest(x=this.player.x,y=this.player.y,max=270):Enemy|undefined {
     let target:Enemy|undefined;let best=max*max; for(const e of this.enemies){if(e.hp<=0)continue;const d=(e.x-x)**2+(e.y-y)**2;if(e.kind==='boss'&&d<max*max*.75)return e;if(d<best){best=d;target=e;}}return target;
   }
-  spawn(kind:EnemyKind,x?:number,y?:number) {
+  spawn(kind:EnemyKind,x?:number,y?:number,random=this.rng) {
     if(this.enemies.length>=150&&!isChief(kind))return;
-    const angle=this.rng.between(0,Math.PI*2);const radius=this.seconds<15?this.rng.between(120,220):this.rng.between(330,500);
+    const angle=random.between(0,Math.PI*2);const radius=this.seconds<15?random.between(120,220):random.between(330,500);
     const [baseHp,speed,size,attack]=ENEMY_STATS[kind];// Moths remain fragile. A late sturdy enemy should survive even an upgraded opening volley.
     const scale=enemyHealthScale(kind,this.seconds,this.difficulty);
-    const enemy:Enemy={id:this.nextId(),kind,x:x??this.player.x+Math.cos(angle)*radius,y:y??this.player.y+Math.sin(angle)*radius,hp:baseHp*scale,maxHp:baseHp*scale,radius:size,speed:speed*rampDifficulty(this.rules.speed,this.seconds),attack:Math.round(attack*rampDifficulty(this.rules.damage,this.seconds)),phase:0,clock:this.rng.between(1,3),slow:0,frozen:0,rooted:0,burn:0,burnClock:0,spore:0,proc:0,flash:0,hitAngle:0,gait:0,attackPose:0};
+    const enemy:Enemy={id:this.nextId(),kind,x:x??this.player.x+Math.cos(angle)*radius,y:y??this.player.y+Math.sin(angle)*radius,hp:baseHp*scale,maxHp:baseHp*scale,radius:size,speed:speed*rampDifficulty(this.rules.speed,this.seconds),attack:Math.round(attack*rampDifficulty(this.rules.damage,this.seconds)),phase:0,clock:random.between(1,3),slow:0,frozen:0,rooted:0,burn:0,burnClock:0,spore:0,proc:0,flash:0,hitAngle:0,gait:0,attackPose:0};
     this.enemies.push(enemy);return enemy;
   }
   private effect(effect:Effect){if(this.effects.length<100)this.effects.push(effect);}
@@ -237,7 +238,7 @@ export class Combat {
         previous=current;const next=this.nearby(current.x,current.y,145*this.reach).filter(e=>!visited.has(e.id)).sort((a,b)=>distance2(a,current)-distance2(b,current))[0];if(!next){
           // Unused jumps converge on a surviving solitary target at reduced strength.
           const unused=2+Math.floor(level/2)-i;
-          if(i===0 && unused>0 && current.hp>0)this.hit(current,unused*1.5*scale,'spark',true);
+          if(i===0 && unused>0 && current.hp>0)this.hit(current,unused*(charged?5:1.5)*scale,'spark',true);
           break;
         }current=next;
       }
@@ -300,8 +301,33 @@ export class Combat {
       p.x+=control.x*travel;p.y+=control.y*travel;p.angle=Math.atan2(control.y,control.x);
     }
     if(this.pathId==='hazel' && this.masteryActive && this.stormCharge<1){
-      this.stormCharge=Math.min(1,this.stormCharge+Math.hypot(p.x-startX,p.y-startY)/300);
+      this.stormCharge=Math.min(1,this.stormCharge+Math.hypot(p.x-startX,p.y-startY)/220);
     }
+  }
+
+  private startFormation(secondWave:boolean){
+    const p=this.player;
+    // Both formations occur each run. Use separate seed bits for order and approach.
+    const charge=((this.seed>>>3)&1)===Number(secondWave);
+    const angle=((this.seed>>>5)%360)*Math.PI/180+(secondWave?2.4:0);
+    const ux=Math.cos(angle),uy=Math.sin(angle);
+    const count=(this.difficulty==='easy'?2:3)+Number(secondWave && this.difficulty==='hard');
+    const distance=charge?165:245;
+    if(this.enemies.length+count>150)return;
+    const formationRandom=new Random(this.seed^(secondWave?285:135));
+    for(let i=0;i<count;i++){
+      const offset=(i-Math.floor(count/2))*(charge?68:84);
+      const e=this.spawn(charge?'beetle':'spitter',p.x+distance*ux-offset*uy,p.y+distance*uy+offset*ux,formationRandom)!;
+      if(charge){
+        this.warn(e,'lane',e.x,e.y,235,angle+Math.PI,1.05);
+        e.clock=3;
+      }else{
+        e.clock=1.1+i*.23;
+      }
+    }
+    this.waveHint=charge?'甲虫冲阵 · 横移避开':'树脂弹阵 · 绕向侧翼';
+    this.waveHintUntil=this.seconds+3;
+    this.spawnClock=Math.max(this.spawnClock,2);
   }
 
   private updateShrine(dt:number){
@@ -330,6 +356,7 @@ export class Combat {
 
   step(dt:number,control:Controls) {
     if(this.ended||this.pendingLevels>0||this.giftPending||this.relicPending)return;
+    const previousTime=this.seconds;
     dt=Math.min(dt,0.05);this.weaponMotion=Math.max(0,this.weaponMotion-dt*4.5);this.seconds+=dt;this.ticks++;this.effects.length=0;
     const p=this.player;p.invincible=Math.max(0,p.invincible-dt);
     this.flameTime=Math.max(0,this.flameTime-dt);this.move(dt,control);
@@ -340,7 +367,15 @@ export class Combat {
     }
     if(this.seconds>=360&&!this.bossSpawned){this.bossSpawned=true;this.spawn('boss');this.effect({kind:'level',x:p.x,y:p.y,text:'古树守卫苏醒了'});}
     this.spawnClock-=dt;this.eliteClock-=dt;
-    if(this.spawnClock<=0){this.spawnClock=Math.max(0.22,0.85-this.seconds/580)*(1+latePressure(this.seconds)*.39)*(this.bossSpawned?3.5:1)/rampDifficulty(this.rules.waveRate,this.seconds);const pool:EnemyKind[]=this.seconds<40?['slime','moth']:this.seconds<100?['slime','moth','twig']:['slime','moth','twig','spitter','beetle'];this.spawn(this.rng.pick(pool));}
+    if(previousTime<135 && this.seconds>=135)this.startFormation(false);
+    if(previousTime<285 && this.seconds>=285 && !this.boss)this.startFormation(true);
+    if(this.waveHint && this.seconds>=this.waveHintUntil)this.waveHint='';
+    if(this.spawnClock<=0){
+      const bossSpacing=this.bossSpawned?this.rules.finalWaveInterval:1;
+      this.spawnClock=Math.max(.22,.85-this.seconds/580)*(1+latePressure(this.seconds)*this.rules.waveRelief)*bossSpacing/rampDifficulty(this.rules.waveRate,this.seconds);
+      const pool:EnemyKind[]=this.seconds<40?['slime','moth']:this.seconds<100?['slime','moth','twig']:['slime','moth','twig','spitter','beetle'];
+      this.spawn(this.rng.pick(pool));
+    }
     if(this.eliteClock<=0&&this.seconds<350){this.spawn(this.rng.next()>.5?'brute':'crystal');this.eliteClock=55/rampDifficulty(55/this.rules.eliteInterval,this.seconds);}
     for(const e of this.enemies){
       if(e.hp<=0)continue;e.rooted=Math.max(0,e.rooted-dt);e.frozen=Math.max(0,e.frozen-dt);if(e.frozen===0)e.clock-=dt;e.slow=Math.max(0,e.slow-dt);e.proc=Math.max(0,e.proc-dt);e.flash=Math.max(0,e.flash-dt);e.spore=Math.max(0,e.spore-dt);
@@ -431,7 +466,7 @@ export class Combat {
         if(this.classTalent && caught.length>=2)p.hp=Math.min(p.maxHp,p.hp+3);
         this.effect({kind:'bloom',x:z.x,y:z.y,radius:z.radius});
       }
-      if(z.tick<=0){z.tick=0.5;for(const e of this.nearby(z.x,z.y,z.radius)){this.hit(e,z.damage,z.kind,true);if(z.kind==='spore')e.spore=2;else e.burn=Math.max(2,e.burn);}}
+      if(z.tick<=0){z.tick=0.5;for(const e of this.nearby(z.x,z.y,z.radius)){const rootedChief=z.bloomed && isChief(e.kind);this.hit(e,z.damage*(rootedChief?1.35:1),z.kind,true);if(z.kind==='spore')e.spore=2;else e.burn=Math.max(2,e.burn);}}
     }
     this.zones=this.zones.filter(z=>z.life>0);
     // A full spell field must not erase a windup or cancel the attack it announces.

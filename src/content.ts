@@ -23,8 +23,8 @@ export const ABILITIES: Ability[] = [
 export const WEAPONS = ABILITIES.filter(a=>a.kind==='weapon');
 export const MASTERY_LEVEL=6;
 export const MASTERIES:Record<CharacterId,{name:string;tip:string;details:string}>={
-  hazel:{name:'游雷',tip:'移动蓄电，拉开距离打出重雷。',details:'每移动 30 步，下一发星雷的射程从 24 步提高到 32 步，首击增加 65% 伤害。未找到目标会保留满电。'},
-  fern:{name:'根阵',tip:'绕着孢子场走，把追兵引回阵里。',details:'孢子场落地 1 秒后，踏入或留在场内可令其开花一次。场中敌人受到额外伤害并定身 0.7 秒，首领改为短暂减速。'},
+  hazel:{name:'游雷',tip:'移动蓄电，拉开距离打出重雷。',details:'每移动 22 步充满电。满电首击伤害提高 65%，射程增至 32 步。只击中一个敌人时，剩余跳数追加伤害。'},
+  fern:{name:'根阵',tip:'绕着孢子场走，把追兵引回阵里。',details:'孢子场落地 1 秒后，踏入或留在场内可令其开花一次。场中敌人受到额外伤害并定身 0.7 秒，首领改为短暂减速，并在这片花阵中多受 35% 孢子伤害。'},
   ash:{name:'焰枪',tip:'对准敌阵闪避，沿途打穿前排。',details:'发动闪避时，沿闪避方向射出一道焰枪，最多贯穿 3 个目标并点燃。焰枪伤害随余烬等级成长。'}
 };
 export const CLASS_TALENTS:Record<CharacterId,{name:string;description:string}>={
