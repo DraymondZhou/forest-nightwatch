@@ -21,8 +21,8 @@ function leg(x,step,side,far,ward){const a=[x,74],k=[x+(side?step*3:0),84+Math.a
 function helmet(side,back,hurt){return p('M-12 2 Q-14 -13 -2 -16 Q8 -18 13 -7L16 -3 12 0 11 8 7 12 1 8 -8 12 -11 7Z',iron)+p('M-13 -3 Q-12 -14 -2 -17 Q8 -17 12 -8L14 -4 3 -3 -5 0Z',steel)+l('M-9 -7Q-5 -14 1 -14M-5 -2L5 -5 11 -5M-10 -4l3 -1M6 -12l2 2',light,1.6)+
  (back?p('M-10 1 Q-2 -2 10 0L8 9 0 12 -8 8Z','#59675c')+l('M-8 2Q0 0 8 2M-6 6Q0 4 6 6',steel):
  p(side?'M1 -1 L12 -4 14 -1 11 1 10 6 5 8 1 6Z':'M-8 -1 L8 -3 9 0 7 7 2 10 -5 7Z',skin,1)+p(side?'M-11 -2L5 -5 14 -5 15 -3 6 -1 5 5 1 7 -1 0 -9 3Z':'M-13 -2L0 -5 14 -5 13 -2 3 0 2 5 -1 6 -3 0 -12 2Z',steel)+l(side?'M8 0L11 -1':hurt?'M-6 2l2 1M4 2l2 -1':'M-7 1l3 0M4 1l3 -1',ink,1.4))+
- p('M-8 -13Q-7 -21 -14 -22Q-5 -23 -1 -17L0 -14Z',cloth)+mark(-8,1,1.3,edge)}
-function hoodHead(side,back,hurt){return p('M-14 10 Q-8 4 -11 -3L-16 -12 -5 -15Q6 -19 12 -8L16 -3 10 -1 8 8 3 12 -3 10 -8 13Z',hood)+p('M-15 -11L-4 -13 -7 -3 -4 6 -9 10 -7 1Z','#455e49',0)+(back?l('M4 -11Q-2 -6 -1 4L-5 8','#a3aa79',1.4):p(side?'M2 -6L11 -7 12 -2 15 1 11 2 10 5 5 7 1 3Z':'M-6 -4L4 -7 9 -3 8 3 4 8 -2 7 -7 2Z',skin,1)+l(side?'M8 -3l3 -.6':hurt?'M-4 0l2 1M4 -1l2 -1':'M-5 -1l3 .4M4 -2l2 .1',ink,1.5)+p('M-9 2Q-2 8 9 3L6 10 -1 12 -8 8Z','#4c6550'))+l('M-11 -10Q-4 -13 2 -13M-8 -7l3 -3','#a4b289',1.2)}
+ p('M-8 -13Q-7 -21 -14 -22Q-5 -23 -1 -17L0 -14Z',cloth)+l('M-2 -15Q2 -12 3 -6','#d8c399',1.7)+mark(-8,1,1.3,edge)}
+function hoodHead(side,back,hurt){return p('M-14 10 Q-8 4 -11 -3L-16 -12 -5 -15Q6 -19 12 -8L16 -3 10 -1 8 8 3 12 -3 10 -8 13Z',hood)+p('M-15 -11L-4 -13 -7 -3 -4 6 -9 10 -7 1Z','#455e49',0)+p('M-9 -8Q-15 -10 -18 -15Q-10 -16 -6 -10Z','#ceb480',.9)+l('M-15 -14l7 5','#65553a',.8)+(back?l('M4 -11Q-2 -6 -1 4L-5 8','#a3aa79',1.4):p(side?'M2 -6L11 -7 12 -2 15 1 11 2 10 5 5 7 1 3Z':'M-6 -4L4 -7 9 -3 8 3 4 8 -2 7 -7 2Z',skin,1)+l(side?'M8 -3l3 -.6':hurt?'M-4 0l2 1M4 -1l2 -1':'M-5 -1l3 .4M4 -2l2 .1',ink,1.5)+p('M-9 2Q-2 8 9 3L6 10 -1 12 -8 8Z','#4c6550'))+l('M-11 -10Q-4 -13 2 -13M-8 -7l3 -3','#a4b289',1.2)}
 const sword=rot(0,p('M-2 0L-2.8 -24 0 -35 3 -24 2 0Z',light)+p('M0 -33L2.5 -23 1.8 -1 -.5 -1Z',steel,0)+p('M-6 0L-4 -2 5 -2 7 0 2 1 1 7 -1 7 -2 1Z',edge)+mark(0,6,1.5,edge));
 const shield=p('M-11 -11 Q-4 -14 0 -16Q5 -13 11 -12L10 1Q8 9 0 15Q-7 10 -10 3Z',edge)+p('M-8.5 -9.7L0 -13 8.5 -10 7.5 1Q6 7 0 11.5Q-7 6 -8 0Z','#425e59')+l('M0 8L0 -8M0 1L-4 -4M0 -2L4 -6',edge,1.6)+mark(-8,-9,1.1,light)+mark(8,-9,1.1,light);
 function body(ward,side,back){if(ward)return p('M-12 -2L9 -2 13 7 10 16 14 30 4 27 -2 31 -12 28 -16 30 -10 14Z',cloth)+p('M-12 0 Q0 -6 12 0L13 7 9 18 2 20 -9 16 -12 9Z',steel)+p('M-10 5Q0 11 11 3L8 14 2 17 -8 14Z',iron,0)+l('M-10 3Q-2 8 9 2M-7 11L-2 13M-6 23L-8 26',light,1.3)+p('M-10 16Q0 19 10 15L11 19 0 22 -11 20Z',hide)+l('M-10 22l2 1M-11 24l2 1M8 23l2 1M9 25l2 1','#af7357',.8)+at(side?3:0,18,p('M-2 -1.5L2 -1.5 2 1.5 -2 1.5Z',edge,.7))+(!back?p('M-14 -1Q-9 -7 -3 -2L-4 4 -14 7 -17 4Z',steel)+l('M-14 1l7 -1',light):p('M-9 -4L8 -3 12 18 8 26 2 24 -7 27 -13 22Z',cloth)+l('M-8 0l-2 18M5 1l4 18','#ab6450'));
@@ -39,18 +39,22 @@ function figure(ward,view,frame,layer,legPhase=0){const side=view===1,back=view=
    :atk?(side?[[5,8],[9,-3],[15,2],[12,10]]:[[-8,8],[-14,-1],[-2,2],[3,12]])[t]:[side?6:-13,13+stride];
  const sh=[side?9:13,heavy?7:hurt?5:12-stride*.7];
  const bladeAngle=heavy?(side?[-128,85,127]:[-118,72,116])[frame-12]:atk?(side?[-28,-57,64,112]:[-40,-69,36,90])[t]:(side?24:-16);
- const blade=at(...h,rot(bladeAngle*(back?-1:1),sword));
+ const contact=heavy?frame===13:atk&&t===2;
+ const axial=!side && contact;
+ const blade=at(...h,g('scale(1 '+(axial?.62:1)+')',rot(axial?(back?18:153):bladeAngle*(back?-1:1),sword)));
  const attack=arm(a,h,true,false,-1)+blade+hand(h);const guard=arm(b,sh,true,true,-1)+at(...sh,g('scale('+(side?.8:1)+' 1)',shield));rear=back?attack:guard;front=back?guard:attack;
- }else{const aim=atk?(side?-8:back?-48:36):22;const bh=side?(atk?[21,3]:[12,12]):(atk?[13,5]:[11,14]);const d=atk?[-1,6,1,-2][t]:0;const rad=aim*Math.PI/180,nock=[bh[0]-(7+d)*Math.cos(rad),bh[1]-(7+d)*Math.sin(rad)];const pull=atk&&t<2?nock:side?(atk?[4,2]:[1,12]):(atk?[-2,5]:[-5,14]);
+ }else{const aim=atk?(side?-5:back?-72:65):22;const bh=side?(atk?[21,1]:[12,12]):(atk?[10,back?-3:8]:[11,14]);const d=atk?[3,14,-2,0][t]:0;const rad=aim*Math.PI/180,nock=[bh[0]-(7+d)*Math.cos(rad),bh[1]-(7+d)*Math.sin(rad)];const pull=atk&&t<2?nock:side?(atk?[4,2]:[1,12]):(atk?[-2,5]:[-5,14]);
  const bow=at(...bh,rot(aim,p('M-5 -22Q5 -12 1 0Q5 12 -5 22Q1 12 -1 1Q1 -12 -5 -22Z','#c69458',1.0)+l('M-5 -22L'+(-7-d)+' 0 -5 22','#e6d5a0',.9)));
  const hold=arm([shoulders[1],2],bh,false,false,-1)+bow+hand(bh);
  const draw=arm([shoulders[0],2],pull,false,true,1)+hand(pull);
  rear=back?hold:draw; front=back?draw:hold;
- if(atk&&t<2&&side)front+=l('M'+nock[0]+' '+nock[1]+'l23 -2','#d5bc8f',1)+at(nock[0]+23,nock[1]-2,p('M0 0l-4 -2 1 3Z',light,.6));}
+ if(atk&&t<2)front+=at(...nock,rot(aim,l('M-2 0L27 0','#e2c79b',1.2)+p('M28 0l-5 -2 1 4Z',light,.65)+p('M1 0l-5 -3 -1 2 3 1Z','#b4b998',.55)));}
  const carry=!ward?at(side?-9:back?-6:-12,10,rot(-42,quiver)):'';
- const torso=(back?'':carry)+rear+core+(back?carry:'')+front+head;
+ const collar=ward?'':at(2,0,p('M-9 -2Q-2 2 6 -3L9 0 3 5 -2 4 -7 8 -6 3Z','#445b51',.9)+l('M-6 3l5 -1 6 -3','#c5bc83',1.2)+mark(2,1,1.65,edge));
+ const torso=(back?'':carry)+rear+core+collar+(back?carry:'')+front+head;
  if(layer==='legs')return legs;
- const lean=heavy?[-6,8,5][frame-12]*(back?-1:1):(hurt?-7:quiet?0:stride)*.8;
+ const drawLean=!ward&&atk?(side?[0,-5,3,1]:[0,-3,2,0])[t]:0;
+ const lean=heavy?[-6,8,5][frame-12]*(back?-1:1):(hurt?-7:quiet?0:stride)*.8+drawLean;
  return (layer==='torso'?'':legs)+at(64+(hurt?-1:0),51+bob+(heavy?2:0),rot(lean,torso))}
 async function bakeMotion(){
  // Keep the hunter's original frame numbers; append the sword and shield bank.

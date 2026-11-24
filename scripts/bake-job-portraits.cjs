@@ -12,8 +12,8 @@ async function mageRest(){
     const bytes=await sharp(path.join(dir,'traveler.png')).extract({left,top,width,height:h}).png().toBuffer();
     layers.push(group('translate('+cx+' '+cy+') rotate('+rotation+')',image(bytes,-ox*w,-oy*height,w,height)));
   }
-  async function grip(frame,cx,cy,oy,rotation,yScale=1){
-    const buf=await sharp(path.join(dir,'grip-parts.png')).extract({left:128*frame,top:0,width:128,height:128}).png().toBuffer();
+  async function grip(frame,cx,cy,oy,rotation,yScale=1,texture='grip-parts.png'){
+    const buf=await sharp(path.join(dir,texture)).extract({left:128*frame,top:0,width:128,height:128}).png().toBuffer();
     layers.push(group('translate('+cx+' '+cy+') rotate('+rotation+') scale(1 '+yScale+')',image(buf,-16,-oy,32,32)));
   }
   // Positions, attachment origins and projected sleeve lengths match WitchRig's
@@ -23,11 +23,12 @@ async function mageRest(){
   await skin('left-upper',10.5,-14,12,.32,.17,-7);
   await skin('left-forearm',12.5,-5.5,10.8,.48,.14,-7);
   await skin('body',0,-20,32,.5,.09);
+  await grip(0,0,-18,10,0,1,'mage-regalia.png');
   const sx=-9.5,sy=-13.7,ex=sx-3,ey=sy+7.4,wx=sx-2.6,wy=sy+12;
   const degrees=(x,y)=>Math.atan2(-x,y)*180/Math.PI;
   await grip(0,sx,sy,8,degrees(ex-sx,ey-sy),Math.hypot(ex-sx,ey-sy)/7.9);
   await grip(1,ex,ey,8,degrees(wx-ex,wy-ey),Math.hypot(wx-ex,wy-ey)/7.9);
-  await grip(5,wx,wy,18,Math.atan2(-6.5,12)*180/Math.PI,Math.hypot(6.5,12)/16.75);
+  await grip(3,wx,wy,21,Math.atan2(-6.5,12)*180/Math.PI,Math.hypot(6.5,12)/16.75,'mage-regalia.png');
   await grip(6,wx,wy,18,0);
   await skin('head',-.5,-18.3,28.5,.5,.90);
   return sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="-40 -50 80 80">'+layers.join('')+'</svg>')).png().toBuffer();

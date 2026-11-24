@@ -197,11 +197,13 @@ export class Combat {
     const angle=Math.atan2(target.y-this.player.y,target.x-this.player.x)+angleOffset;
     const shot:Shot={id:this.nextId(),x:this.player.x,y:this.player.y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:2,radius:weapon==='comet'?10:7,damage,weapon,pierce,hit:new Set()};this.shots.push(shot);return shot;
   }
-  private cast(weapon:WeaponId,level:number) {
-    const charged=weapon==='spark' && this.pathId==='hazel' && this.masteryActive && this.stormCharge>=1;
-    const focused=this.relic==='stillglass' && this.focus>=1 && weapon===this.path.weapon;
-    const projectile=weapon==='bow'||weapon==='comet'||weapon==='ember';
-    if(projectile && this.shots.length>=280)return false;
+  get windupTime(){return this.weaponClocks[this.path.weapon]??0;}
+  get windupTarget(){
+    const left=this.windupTime,weapon=this.path.weapon;
+    if(left<=0 || left>.16 || !this.build[weapon])return;
+    return this.aimTarget(weapon,this.build[weapon]!,weapon==='spark' && this.masteryActive && this.stormCharge>=1,this.relic==='stillglass' && this.focus>=1);
+  }
+  private aimTarget(weapon:WeaponId,level:number,charged:boolean,focused:boolean){
     const range=weapon==='blade'?(110+level*7)*this.reach*(this.heavyReady?1.3:1):weapon==='bow'?510:weapon==='comet'?480:weapon==='ember'?350:weapon==='frost'?(140+level*12)*this.reach:charged?320:240;
     let target=this.nearest(this.player.x,this.player.y,range);
     if(focused || (charged && this.classTalent) || (weapon==='spore' && this.pathId==='fern' && this.masteryActive)){
@@ -214,6 +216,14 @@ export class Combat {
         if(d<best){target=e;best=d;}
       }
     }
+    return target;
+  }
+  private cast(weapon:WeaponId,level:number) {
+    const charged=weapon==='spark' && this.pathId==='hazel' && this.masteryActive && this.stormCharge>=1;
+    const focused=this.relic==='stillglass' && this.focus>=1 && weapon===this.path.weapon;
+    const projectile=weapon==='bow'||weapon==='comet'||weapon==='ember';
+    if(projectile && this.shots.length>=280)return false;
+    const target=this.aimTarget(weapon,level,charged,focused);
     if(!target)return false;
     if(focused)this.focus=0;
     this.effect({kind:'cast',weapon,x:this.player.x,y:this.player.y,tx:target.x,ty:target.y});

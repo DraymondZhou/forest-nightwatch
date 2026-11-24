@@ -63,6 +63,7 @@ export class ForestScene extends Phaser.Scene {
     this.load.spritesheet('pickups',art('pickups.png'),{frameWidth:64,frameHeight:64});
     this.load.image('ground',art('woodcut-ground.webp'));this.load.image('props',art('woodcut-props.png'));this.load.spritesheet('enemies',art('enemy-poses.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('grip',art('grip-parts.png'),{frameWidth:128,frameHeight:128});
+    this.load.spritesheet('mage-regalia',art('mage-regalia.png'),{frameWidth:128,frameHeight:128});
     this.load.atlas('turns',art('traveler-turns.png'),turnAtlas);
     this.load.atlas('traveler',art('traveler.png'),travelerAtlas);
     this.load.on('loaderror',()=>this.hooks.error('部分美术资源加载失败，请检查网络后重新加载。'));
@@ -163,6 +164,8 @@ export class ForestScene extends Phaser.Scene {
       if(this.sim.pendingLevels>0){this.running=false;this.hooks.upgrade();break;}
     }
     const readyPose=this.sim.path.job==='mage'?this.sim.focus>=1:this.sim.heavyReady;
+    const target=this.sim.windupTarget;
+    if(target)this.rig.prepare(target.x-this.sim.player.x,target.y-this.sim.player.y,this.sim.windupTime);
     this.rig.update(dt,this.sim.player.moving,this.sim.player.angle,this.sim.player.invincible>0,this.sim.seconds,this.sim.dashTime,readyPose);
     // Render between the two fixed simulation samples on high-refresh displays.
     const blend=this.sim.path.job==='hunter' && this.running?Math.min(1,this.accumulator*60):1;
@@ -355,20 +358,23 @@ export class ForestScene extends Phaser.Scene {
       if(!visible(shot.x,shot.y,36))continue;
       const angle=Math.atan2(shot.vy,shot.vx);
       if(shot.weapon==='enemy'){drawEnemyMissile(this.warningInk,shot.x,shot.y,angle,shot.missile??'seed');continue;}
+      // Ease from the release hand onto the simulation path in the first 90 ms.
+      const lift=shot.lance?0:Phaser.Math.Clamp((shot.life-1.91)/.09,0,1);
+      const visualX=shot.x+Math.cos(angle)*14*lift,visualY=shot.y+(-20+Math.sin(angle)*6)*lift;
       if(sim.path.job==='hunter' && (shot.weapon==='ember'||shot.weapon==='comet'||(shot.weapon==='bow'&&sim.build.ember))){
-        this.jobField.paint(shot.weapon==='comet'?1:0,shot.x,shot.y,shot.weapon==='comet'?60:56,angle);
+        this.jobField.paint(shot.weapon==='comet'?1:0,visualX,visualY,shot.weapon==='comet'?60:56,angle);
         continue;
       }
-      if(shot.weapon==='bow'){drawArrow(g,shot.x,shot.y,angle);continue;}
+      if(shot.weapon==='bow'){drawArrow(g,visualX,visualY,angle);continue;}
       if(shot.weapon==='blade')continue;
-      if(!this.hooks.lowQuality()){g.lineStyle(shot.weapon==='comet'?4:2,TINT[shot.weapon],.38);g.lineBetween(shot.x,shot.y,shot.x-shot.vx*.055,shot.y-shot.vy*.055);}
+      if(!this.hooks.lowQuality()){g.lineStyle(shot.weapon==='comet'?4:2,TINT[shot.weapon],.38);g.lineBetween(visualX,visualY,visualX-shot.vx*.055,visualY-shot.vy*.055);}
       if(shot.lance){
         const ux=Math.cos(angle),uy=Math.sin(angle);
         g.fillStyle(0xf49656,.85);
-        g.fillTriangle(shot.x+ux*13,shot.y+uy*13,shot.x-ux*37-uy*5,shot.y-uy*37+ux*5,shot.x-ux*22+uy*6,shot.y-uy*22-ux*6);
-        g.lineStyle(2,0xffde86,1);g.lineBetween(shot.x-ux*42,shot.y-uy*42,shot.x+ux*13,shot.y+uy*13);
+        g.fillTriangle(visualX+ux*13,visualY+uy*13,visualX-ux*37-uy*5,visualY-uy*37+ux*5,visualX-ux*22+uy*6,visualY-uy*22-ux*6);
+        g.lineStyle(2,0xffde86,1);g.lineBetween(visualX-ux*42,visualY-uy*42,visualX+ux*13,visualY+uy*13);
       }
-      this.fieldMarks.paint(MARK[shot.weapon],shot.x,shot.y,shot.weapon==='comet'?32:27,angle);
+      this.fieldMarks.paint(MARK[shot.weapon],visualX,visualY,shot.weapon==='comet'?32:27,angle);
     }
     const p=sim.player;g.fillStyle(0x0b2926,.5);g.fillEllipse(p.x,p.y+21,35,13);if(sim.dashTime>0){g.lineStyle(1,0xcbe5b2,.55);g.strokeEllipse(p.x,p.y+16,39,12);}
     if(sim.build.leaf){const count=2+sim.build.leaf,r=(80+sim.build.leaf*7)*sim.reach;if(sim.path.job!=='warden'){g.lineStyle(1,0xe4d998,.16);g.strokeCircle(p.x,p.y,r);}for(let i=0;i<count;i++){const a=sim.seconds*2.6+i/count*Math.PI*2;const x=p.x+Math.cos(a)*r,y=p.y+Math.sin(a)*r;if(sim.path.job==='warden')this.jobField.paint(2,x,y,49,a+1.1);else this.fieldMarks.paint(MARK.leaf,x,y,25,a+1.8);}}
@@ -381,10 +387,10 @@ export class ForestScene extends Phaser.Scene {
           this.stormMarks.paint(Math.min(5,Math.floor((1-alpha)*6)),tip.x,tip.y,18,-.7,alpha);
           continue;
         }
-        g.lineStyle(1,0xf0cd84,alpha);
-        g.lineBetween(tip.x-r*1.6,tip.y,tip.x+r*1.6,tip.y);
-        g.lineBetween(tip.x,tip.y-r*1.6,tip.x,tip.y+r*1.6);
-        g.fillStyle(0xffedbe,alpha);g.fillCircle(tip.x,tip.y,r*.6);
+        if(!e.weapon)continue;
+        const a=Math.atan2(e.ty!-e.y,e.tx!-e.x),dx=Math.cos(a),dy=Math.sin(a);
+        this.hitMarks.paint(MARK[e.weapon],tip.x+dx*(1-alpha)*9,tip.y+dy*(1-alpha)*9,9+r*1.5,a,alpha);
+        g.fillStyle(TINT[e.weapon]??0xffedbe,alpha);g.fillCircle(tip.x,tip.y,r*.34);
       }else if(e.kind==='shellBreak'){
         const age=1-alpha, spread=(e.radius??24)*(.45+age);
         for(let i=0;i<(this.hooks.lowQuality()?3:6);i++){
@@ -448,7 +454,11 @@ export class ForestScene extends Phaser.Scene {
           g.lineBetween(e.x+dx*(4+travel),e.y+dy*(4+travel),e.x+dx*(8+travel+alpha*6),e.y+dy*(8+travel+alpha*6));
         }
        }else if(e.kind==='slash'){
-        drawMelee(g,e.x,e.y,e.radius!,e.tx!,1-alpha);
+        // A short blade trace begins at the wielding hand, ahead of the wider hit.
+        const a=e.tx!,age=1-alpha;
+        drawMelee(g,e.x+8*Math.cos(a),e.y-18+5*Math.sin(a),e.empowered?44:36,a,Math.min(1,age*1.45));
+        const reach=Phaser.Math.Linear(40,e.radius!,Math.min(1,age*2.5));
+        drawMelee(g,e.x,e.y-12*(1-age),reach,a,age,e.empowered?.72:.48);
         if(e.empowered){
           drawMelee(g,e.x,e.y,e.radius!*.82,e.tx!-.12,Math.min(.99,1-alpha+.09));
           const a=e.tx!-.8+1.68*Math.min(1,(1-alpha)/.64),r=e.radius!;

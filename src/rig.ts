@@ -22,7 +22,8 @@ export class WitchRig {
   private readonly wand: Bone;
   private readonly upperSleeve: Image;
   private readonly lowerSleeve: Image;
-  private readonly sideGrip: Image;
+  private readonly mantle: Image;
+  private windup=0;
   private readonly shaft: Image;
   private readonly fingers: Image;
   private readonly lens: Phaser.GameObjects.Graphics;
@@ -83,14 +84,16 @@ export class WitchRig {
     skin(freeElbow,'left-forearm',10.8,.48,.14,0xd2c6af);
     this.cloak = skin(this.chest,'body',32,.5,.09,palette);
 
+    this.mantle=scene.add.image(0,2,'mage-regalia',0).setOrigin(.5,10/32).setScale(.25);
+    this.chest.add(this.mantle);
     this.wandArm = joint(this.chest,-8,6.3);
     this.upperSleeve=gripPart(this.wandArm,0,8);
     this.wandElbow = joint(this.wandArm,0,ARM_LENGTH);
     this.lowerSleeve=gripPart(this.wandElbow,1,8);
     this.wand = joint(this.wandElbow,0,ARM_LENGTH);
     // Fingers and shaft share one attachment. Both rotate about the cuff.
-    this.sideGrip=gripPart(this.wand,2,18);
-    this.shaft=gripPart(this.wand,5,18);
+    this.shaft=scene.add.image(0,0,'mage-regalia',3).setOrigin(.5,21/32).setScale(.25);
+    this.wand.add(this.shaft);
     this.fingers=gripPart(this.wand,6,18);
     this.lens=scene.add.graphics().setVisible(false);
     this.lens.lineStyle(1.25,0x664932).strokeEllipse(0,0,9,11);
@@ -119,8 +122,8 @@ export class WitchRig {
     this.wandArm.x = view === 'right' ? -4.8 : view === 'front' ? -9.5 : 8.6;
     this.freeArm.x = side ? -this.wandArm.x : rear ? -10.5 : 10.5;
     if(rear)this.wandArm.x=10;
-    this.sideGrip.visible=side && this.carriesStaff;
-    this.shaft.visible=!side && this.carriesStaff;this.fingers.visible=!side || !this.carriesStaff;
+    this.mantle.setFrame(side?1:rear?2:0);
+    this.shaft.visible=this.carriesStaff;this.shaft.scaleY=.25;this.fingers.rotation=0;
     this.shaftProjection=1;
     this.upperSleeve.scaleY=this.lowerSleeve.scaleY=.25;
     this.wandElbow.y=this.wand.y=ARM_LENGTH;
@@ -128,7 +131,7 @@ export class WitchRig {
     // right sleeve passes behind the coat. The near sleeve crosses its front.
     this.chest.remove(this.wandArm);
     const coatIndex = this.chest.getIndex(this.cloak);
-    this.chest.addAt(this.wandArm,coatIndex + (view==='right'||view==='front' ? 1 : 0));
+    this.chest.addAt(this.wandArm,coatIndex + (view==='right'||view==='front' ? 2 : 0));
   }
 
   private turnFeet(view: Facing) {
@@ -146,6 +149,11 @@ export class WitchRig {
     }
   }
 
+  prepare(dx:number,dy:number,left:number){
+    if(this.hurtLeft>.12)return;
+    this.windup=1-left/.16;this.attackFacing=facingFromVector(dx,dy,this.view);
+  }
+
   cast(dx: number, dy = 0) {
     // A volley may emit several casts within one simulation tick.
     if (this.castTime < .13 || this.hurtLeft>.16) return;
@@ -153,7 +161,7 @@ export class WitchRig {
     if (this.attackFacing !== this.view) this.setView(this.attackFacing);
     this.aim = Math.atan2(dy,Math.abs(dx));
     this.aimX=dx/(Math.hypot(dx,dy)||1);
-    this.castTime = 0;
+    this.castTime = 0;this.windup=0;
   }
 
   update(dt: number, moving: boolean, angle: number, invincible: boolean, seconds: number, dashTime=0,focused=false) {
@@ -167,12 +175,15 @@ export class WitchRig {
     const recoil=Math.sin(Math.min(1,(.30-this.hurtLeft)/.07)*Math.PI/2)*(this.hurtLeft/.30)**2;
     const lunge=Math.sin(Math.PI*Math.min(1,dashTime/.20));
     if (moving) this.walkFacing = facingFromVector(Math.cos(angle),Math.sin(angle),this.walkFacing);
-    const look = this.castTime < .29 ? this.attackFacing : moving ? this.walkFacing : this.view;
+    const preparing=this.windup;this.windup=0;
+    const look = preparing || this.castTime < .29 ? this.attackFacing : moving ? this.walkFacing : this.view;
     if (look !== this.view && this.hurtLeft<.16) this.setView(look);
-    this.turnFeet(moving ? this.walkFacing : look);
+    const braced=preparing>0 || this.castTime<.24;
+    this.turnFeet(moving && !braced ? this.walkFacing : look);
 
-    const step = Math.sin(this.phase)*this.speed;
-    const sideStep = this.walkFacing==='left' ? -1 : 1;
+    const forward=this.footView==='front'?Math.sin(angle):this.footView==='back'?-Math.sin(angle):this.footView==='right'?Math.cos(angle):-Math.cos(angle);
+    const step=Math.sin(this.phase)*this.speed*(braced && forward<0?-1:1);
+    const sideStep = this.footView==='left' ? -1 : 1;
     this.root.alpha = invincible ? .84+.16*Math.abs(Math.sin(seconds*7)) : 1;
     const axialFeet=this.footView==='front'||this.footView==='back';
     const depthStep=axialFeet?(this.footView==='front'?step:-step):0;
@@ -191,6 +202,7 @@ export class WitchRig {
     this.hips.x=this.recoilX*recoil*4+depthStep*.85;
     this.hips.y=2-Math.abs(step)*(axialFeet?.8:1.35)+this.recoilY*recoil*2+lunge*2.4;
     this.chest.rotation=step*(axialFeet?.017:.035)+this.recoilX*recoil*.19+lunge*.15*Math.cos(angle);
+    this.mantle.rotation=-step*.045+(this.view==='left'?-1:1)*lunge*.09;
     this.chest.y = -22+Math.sin(seconds*2.8)*.35;
     this.head.rotation = -this.chest.rotation*.45-this.recoilX*recoil*.11;
     this.head.y=1.7+recoil*2+lunge*.7;
@@ -204,10 +216,11 @@ export class WitchRig {
     const t = this.castTime;
     // The spell is already live on cast. Hold the pointing pose through its
     // first flash, then bring the wrist back to rest with a small overshoot.
-    const stroke=t<.045?1:t<.21?Math.cos((t-.045)/.165*Math.PI*.5)**2
+    const stroke=preparing?-.40*preparing:t<.045?1:t<.21?Math.cos((t-.045)/.165*Math.PI*.5)**2
       :t<.29?-.065*Math.sin((t-.21)/.08*Math.PI):0;
     // Keep a folded elbow and the grip close to the chest. The wrist leads a
     // short arc; the tip supplies most of the visible travel.
+    this.chest.rotation+=(this.view==='left'?-1:1)*(.075*stroke-.035*preparing);
     const front = this.view==='front', rear = this.view==='back', far = this.view==='left';
     this.freeArm.y=6+((front||rear)?step*1.45:0);
     if(front||rear){

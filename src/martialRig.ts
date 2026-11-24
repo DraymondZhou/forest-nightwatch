@@ -11,6 +11,7 @@ export class MartialRig {
   private facing:Facing='front';
   private attack=1; private wound=0; private stride=0;
   private heavySwing=false;
+  private windup=0;
   private recoilX=0; private recoilY=0;
   private tip=new Phaser.Math.Vector2();
   private bank:number;
@@ -21,11 +22,16 @@ export class MartialRig {
     this.figure=scene.add.image(0,0,'hunter-motion',this.bank+24).setOrigin(.5,.61).setScale(.83);
     this.root=scene.add.container(0,0,[this.feet,this.figure]);
   }
+  prepare(dx:number,dy:number,left:number){
+    if(this.wound>.09)return;
+    this.windup=1-left/.16;
+    this.facing=facingFromVector(dx,dy,this.facing);
+  }
   cast(dx:number,dy:number){
     if(this.attack<.14 || this.wound>.13)return;
     this.facing=facingFromVector(dx,dy,this.facing);
     this.heavySwing=false;
-    this.attack=0;
+    this.windup=0;this.attack=0;
   }
   cleave(){this.heavySwing=true;}
   hurt(dx:number,dy:number){
@@ -37,18 +43,22 @@ export class MartialRig {
     if(moving){
       this.stride+=dt*44;
       this.walkFacing=facingFromVector(Math.cos(angle),Math.sin(angle),this.walkFacing);
-      if(this.attack>=.27)this.facing=this.walkFacing;
+      if(!this.windup && this.attack>=.27)this.facing=this.walkFacing;
     }
-    const travel=moving?this.walkFacing:this.facing;
-    const gait=moving?Math.floor(this.stride)%24:0;
+    // The pelvis follows the aiming torso. Opposite travel plays the stride backwards.
+    const braced=this.windup>0 || this.attack<.24;
+    const travel=moving && !braced?this.walkFacing:this.facing;
+    const axis=travel==='left'?Math.PI:travel==='right'?0:travel==='back'?-Math.PI/2:Math.PI/2;
+    const gait=moving?(Math.cos(angle-axis)<0?23-Math.floor(this.stride)%24:Math.floor(this.stride)%24):0;
     const legs=this.bank+bankRow(travel)*30+gait;
     // Cast is delivered on the simulation's contact/release tick. Show contact
     // first, follow through, settle the hands, then return to the ready pose.
     let upperPose=0;
     if(this.wound>.09)upperPose=5;
+    else if(this.windup>0)upperPose=this.windup>.36?2:1;
     else if(this.attack<.065)upperPose=3;
     else if(this.attack<.15)upperPose=4;
-    else if(this.attack<.22)upperPose=1;
+
     const view=bankRow(this.facing);
     let top=this.bank+view*30+24+upperPose;
     if(this.wound<=.09 && this.bank===90){
@@ -63,6 +73,10 @@ export class MartialRig {
     const bob=moving?-Math.abs(Math.sin(this.stride*Math.PI/12))*1.15:0;
     this.feet.setFlipX(travel==='left').setPosition(x,y);
     this.figure.setFlipX(this.facing==='left').setPosition(x,y+bob+Math.sin(Math.PI*dash/.2));
+    const brace=this.windup*.055,release=this.attack<.16?Math.sin(Math.PI*this.attack/.16)*.045:0;
+    const lean=(this.bank===90?1:-1)*(release-brace);
+    this.figure.setRotation(travel==='left'?-lean:travel==='right'?lean:0);
+    this.windup=0;
     this.root.alpha=invincible?.86+.14*Math.abs(Math.sin(seconds*7)):1;
     this.root.setDepth(this.wound>.025?1800:1000);
   }

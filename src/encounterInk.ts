@@ -99,7 +99,7 @@ export function drawWarning(g:Ink,x:number,y:number,r:number,kind:WarningKind,an
   g.restore();
 }
 
-export function drawMelee(g:Ink,x:number,y:number,r:number,angle:number,progress:number){
+export function drawMelee(g:Ink,x:number,y:number,r:number,angle:number,progress:number,opacity=1){
   const t=Math.min(1,Math.max(0,progress));
   if(t>=1 || r<=0)return;
   const tip=-.82+1.69*Math.min(1,t/.64);
@@ -110,7 +110,7 @@ export function drawMelee(g:Ink,x:number,y:number,r:number,angle:number,progress
     const u=i/8,a=tail+(tip-tail)*u;
     const c=Math.cos(a),s=Math.sin(a),inner=r*(1-.11*Math.sin(Math.PI*u));
     const bx=r*c,by=r*s,jx=inner*c,jy=inner*s;
-    g.fillStyle(i>5?0xffe9b1:0xd4a66b,(1-t*t)*(.34+.66*u));
+    g.fillStyle(i>5?0xffe9b1:0xd4a66b,opacity*(1-t*t)*(.34+.66*u));
     g.fillTriangle(ax,ay,bx,by,ix,iy);g.fillTriangle(bx,by,jx,jy,ix,iy);
     ax=bx;ay=by;ix=jx;iy=jy;
   }

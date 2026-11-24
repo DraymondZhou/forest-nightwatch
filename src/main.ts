@@ -40,7 +40,7 @@ function home() {
   page='home'; run=undefined; scene.setPaused(true); scene.sim=undefined;
   audio.combat=false; audio.paused=false;
   hud.hidden=true; panel.hidden=false; app.className='cover';
-  panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?(store.data.checkpoint?action('restore','继续',true):action('select','开始游戏',true)):'<button disabled>游戏加载中…</button>'}${action('camp','营地训练')}${action('journal','守夜手记')}${action('settings','设置')}</nav><small>v1.16.0</small>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
+  panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?(store.data.checkpoint?action('restore','继续',true):action('select','开始游戏',true)):'<button disabled>游戏加载中…</button>'}${action('camp','营地训练')}${action('journal','守夜手记')}${action('settings','设置')}</nav><small>v1.17.0</small>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
 }
 let chosenJob:Job='mage';
 let banked=0,lastCheckpoint=-10;
