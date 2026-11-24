@@ -11,12 +11,18 @@ import { ATTACK_POSE_TIME } from './enemyPose';
 
 export type EnemyKind='slime'|'moth'|'twig'|'spitter'|'beetle'|'brute'|'crystal'|'boss'|'boar'|'mothQueen';
 export interface Enemy {id:number;kind:EnemyKind;x:number;y:number;hp:number;maxHp:number;radius:number;speed:number;attack:number;phase:number;clock:number;slow:number;frozen:number;rooted:number;burn:number;burnClock:number;spore:number;proc:number;flash:number;hitAngle:number;gait:number;attackPose:number; charge?:{angle:number;remaining:number}; preparing?:number; windupTime?:number; attackHeading?:number; pattern?:number; recovery?:number;shellBroken?:boolean;pollenTicks?:number;pollenClock?:number;pollenDamage?:number}
+export const CRYSTAL_SPREAD=[-.18,0,.18] as const;
+export function enemyBodyY(e:Enemy){
+  const bob=e.kind==='moth'||e.kind==='mothQueen'||e.kind==='crystal'?Math.sin(e.gait*9+e.id)*2:
+    e.kind==='slime'?Math.abs(Math.sin(e.gait*4.7+e.id))*2:0;
+  return e.y-10-bob;
+}
 export const isChief=(kind:EnemyKind)=>kind==='boss'||kind==='boar'||kind==='mothQueen';
 export const chiefName=(kind:EnemyKind)=>kind==='boar'?'棘冠山主':kind==='mothQueen'?'月绒蛾后':'古树守卫';
-export interface Shot {id:number;x:number;y:number;vx:number;vy:number;life:number;radius:number;damage:number;weapon:WeaponId|'enemy';pierce:number;lance?:boolean; missile?:'sap'|'shard'|'seed'|'dust'; trialShot?:boolean; aimed?:boolean;hit:Set<number>}
+export interface Shot {id:number;x:number;y:number;vx:number;vy:number;life:number;radius:number;damage:number;weapon:WeaponId|'enemy';pierce:number;lance?:boolean; missile?:'sap'|'shard'|'seed'|'dust'; trialShot?:boolean; aimed?:boolean;releaseOffset?:{x:number;y:number};hit:Set<number>}
 export interface Zone {id:number;x:number;y:number;radius:number;life:number;tick:number;damage:number;kind:'spore'|'ember'|'warning';timer:number;bloomed?:boolean; shape?:'disk'|'ring'|'lane'|'cleave'; angle?:number; owner?:number; duration?:number}
 export interface Drop {id:number;x:number;y:number;value:number;born:number;kind:'xp'|'heal'|'coin'}
-export interface Effect {kind:'shellBreak'|'lure'|'impactZone'|'slash'|'bloom'|'wound'|'dash'|'evade'|'defeat'|'gather'|'strike'|'cast'|'hit'|'chain'|'burst'|'frost'|'heal'|'level'|'synergy';x:number;y:number;enemyKind?:EnemyKind;shellBroken?:boolean;weapon?:WeaponId;tx?:number;ty?:number;radius?:number;color?:number;text?:string;shape?:Zone['shape'];arcSeed?:number;hop?:number;empowered?:boolean}
+export interface Effect {kind:'shellBreak'|'lure'|'impactZone'|'slash'|'bloom'|'wound'|'dash'|'evade'|'defeat'|'gather'|'strike'|'cast'|'hit'|'chain'|'burst'|'frost'|'heal'|'level'|'synergy';x:number;y:number;enemyKind?:EnemyKind;shellBroken?:boolean;shot?:Shot;weapon?:WeaponId;tx?:number;ty?:number;radius?:number;color?:number;text?:string;shape?:Zone['shape'];arcSeed?:number;hop?:number;empowered?:boolean}
 export interface Controls {x:number;y:number;dash?:boolean}
 export interface Shrine {x:number;y:number;charge:number;expires:number}
 export type ShrineGift = 'spring' | 'flame';
@@ -157,7 +163,7 @@ export class Combat {
       color:0xf19a8a,radius:amount,text:'−'+Math.round(amount)});
     if(this.player.hp<=0){this.fatal={kind,damage:amount};this.ended=true;}
   }
-  private hit(e:Enemy,damage:number,weapon:WeaponId,secondary=false,fromAngle?:number,area=false,empowered=false) {
+  private hit(e:Enemy,damage:number,weapon:WeaponId,secondary=false,fromAngle?:number,area=false,empowered=false,shot?:Shot) {
     if(e.hp<=0)return;
     // A beetle's shell absorbs broad impacts. Direct spells, poison and burn still deal full damage.
     if(e.kind==='beetle' && !e.shellBroken && (area||weapon==='leaf'||weapon==='frost'))damage*=.48;
@@ -169,7 +175,7 @@ export class Combat {
     e.hitAngle = angle;
     if (e.hp <= 0) this.effect({kind:'defeat', x:e.x, y:e.y, tx:angle, radius:e.radius, enemyKind:e.kind,shellBroken:e.shellBroken});
     if (!secondary && weapon !== 'spore') {
-      this.effect({kind:'strike',weapon,empowered,x:e.x,y:e.y,tx:angle,
+      this.effect({kind:'strike',weapon,empowered,shot,x:e.x,y:e.y,tx:angle,
         radius:e.hp<=0?24:14,color:weapon==='ember'?0xffbb76:weapon==='spark'?0xb7e4d4:0xe5cb93});
     }
     if(this.ticks%4===0||damage>35)this.effect({kind:'hit',x:e.x,y:e.y,text:String(Math.round(damage)),color:0xf4db9c});
@@ -179,7 +185,7 @@ export class Combat {
         e.proc=.70;this.hit(e,8*this.power,'leaf',true);
       }else if(weapon==='bow'&&this.build.ember){
         if(e.burn<=0)e.burnClock=.5;e.burn=Math.max(e.burn,2);e.proc=.60;
-        this.effect({kind:'synergy',weapon:'bow',x:e.x,y:e.y,tx:angle,radius:22,color:0xe39855});
+        this.effect({kind:'synergy',weapon:'bow',shot,x:e.x,y:e.y,tx:angle,radius:22,color:0xe39855});
       }else if(weapon==='spark'&&e.spore>0&&this.build.spore){
         e.spore=0;e.proc=1.2;this.effect({kind:'synergy',x:e.x,y:e.y,radius:65,color:0xb5e9ae});
         for(const n of this.nearby(e.x,e.y,65))this.hit(n,12*this.power,'spark',true,undefined,true);
@@ -311,7 +317,7 @@ export class Combat {
     }
     this.effect({kind:'impactZone',x:z.x,y:z.y,radius:z.radius,tx:angle,shape:z.shape});
   }
-  private enemyShot(e:Enemy,angle:number,speed=145){if(this.shots.length>=280)return;this.shots.push({id:this.nextId(),x:e.x,y:e.y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:5,radius:e.kind==='crystal'?5:e.kind==='spitter'?9:7,missile:e.kind==='spitter'?'sap':e.kind==='crystal'?'shard':e.kind==='mothQueen'?'dust':'seed',damage:e.attack,weapon:'enemy',pierce:1,hit:new Set()});}
+  private enemyShot(e:Enemy,angle:number,speed=145){if(this.shots.length>=280)return;this.shots.push({id:this.nextId(),x:e.x,y:e.y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:5,releaseOffset:{x:0,y:enemyBodyY(e)-e.y},radius:e.kind==='crystal'?5:e.kind==='spitter'?9:7,missile:e.kind==='spitter'?'sap':e.kind==='crystal'?'shard':e.kind==='mothQueen'?'dust':'seed',damage:e.attack,weapon:'enemy',pierce:1,hit:new Set()});}
   private move(dt:number, control:Controls) {
     const p=this.player, startX=p.x,startY=p.y,length=Math.hypot(control.x,control.y);
     this.dashCooldown=Math.max(0,this.dashCooldown-dt);
@@ -496,7 +502,7 @@ export class Combat {
         if(e.kind==='spitter'||e.kind==='crystal'||e.kind==='boss')e.attackPose=ATTACK_POSE_TIME;
         const aim=Math.atan2(dy,dx);
         if(e.kind==='spitter')this.enemyShot(e,aim,126);
-        if(e.kind==='crystal')for(const offset of [-.18,0,.18])this.enemyShot(e,aim+offset,211);
+        if(e.kind==='crystal')for(const offset of CRYSTAL_SPREAD)this.enemyShot(e,aim+offset,211);
         if(e.kind==='twig'||e.kind==='brute'||e.kind==='beetle'||e.kind==='boar'){
           const lane=e.kind==='boar'||e.kind==='beetle',range=e.kind==='boar'?245:e.kind==='beetle'?130:e.kind==='brute'?100:62;
           if(dist<range+25){
@@ -565,7 +571,7 @@ export class Combat {
         const aimed=shot.aimed&&this.classTalent&&(isChief(e.kind)||e.kind==='brute'||e.kind==='crystal');
         if(shot.weapon==='bow'&&this.pathId==='volley'&&this.classTalent&&!isChief(e.kind))e.slow=Math.max(.55,e.slow);
         if(shot.trialShot && isChief(e.kind))this.trialDone=true;
-        shot.hit.add(e.id);this.hit(e,shot.damage*(aimed?1.4:1),shot.weapon,false,Math.atan2(shot.vy,shot.vx),false,!!shot.aimed);shot.pierce--;
+        shot.hit.add(e.id);this.hit(e,shot.damage*(aimed?1.4:1),shot.weapon,false,Math.atan2(shot.vy,shot.vx),false,!!shot.aimed,shot);shot.pierce--;
         if(shot.weapon==='ember'){
           if(e.burn<=0)e.burnClock=.5;
           e.burn=3;
@@ -584,7 +590,7 @@ export class Combat {
           }
           this.effect({kind:'burst',x:e.x,y:e.y,radius,color:0xf4b172});
         }
-        if(shot.pierce<=0){shot.life=0;break;}
+        if(shot.pierce<=0)break;
       }
     }
     this.shots=this.shots.filter(s=>s.life>0 && s.pierce>0);

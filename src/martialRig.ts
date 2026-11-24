@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import bladeSockets from './blade-sockets.json';
+import bowSockets from './bow-sockets.json';
 import {facingFromVector,type Facing} from './pose';
 
 const bankRow=(v:Facing)=>v==='back'?2:v==='front'?0:1;
@@ -79,6 +81,26 @@ export class MartialRig {
     this.windup=0;
     this.root.alpha=invincible?.86+.14*Math.abs(Math.sin(seconds*7)):1;
     this.root.setDepth(this.wound>.025?1800:1000);
+  }
+  bowSocket(dx:number,dy:number,live:boolean){
+    const frame=Number(this.figure.frame.name),view=facingFromVector(dx,dy,this.facing);
+    // A restored, already flying arrow predating sockets uses its own release view.
+    const row=live?Math.floor(frame/30):bankRow(view);
+    const [x,y]=bowSockets[row*6+(live?frame%30-24:3)];
+    const flip=live?this.figure.flipX:view==='left';
+    return this.socketOffset(x,y,flip,live);
+  }
+  private socketOffset(x:number,y:number,flip:boolean,live=true){
+    const localX=(flip?128-x:x)-this.figure.displayOriginX,localY=y-this.figure.displayOriginY;
+    const a=live?this.figure.rotation:0,c=Math.cos(a),s=Math.sin(a);
+    return {x:(live?this.figure.x:0)+this.figure.scaleX*(localX*c-localY*s),
+      y:(live?this.figure.y:0)+this.figure.scaleY*(localX*s+localY*c)};
+  }
+  bladeLine(){
+    const frame=Number(this.figure.frame.name),i=frame>=180?18+frame-180:Math.floor((frame-90)/30)*6+frame%30-24;
+    const [gx,gy,tx,ty]=bladeSockets[i];
+    const grip=this.socketOffset(gx,gy,this.figure.flipX),tip=this.socketOffset(tx,ty,this.figure.flipX);
+    return {x:this.root.x+grip.x,y:this.root.y+grip.y,length:Math.hypot(tip.x-grip.x,tip.y-grip.y),angle:Math.atan2(tip.y-grip.y,tip.x-grip.x)};
   }
   wandTip(){this.tip.set(this.root.x,this.root.y-12);return this.tip;}
   fall(){this.root.scene.tweens.add({targets:this.root,angle:-70,alpha:.5,duration:350});}
