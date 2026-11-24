@@ -1,5 +1,5 @@
 import { describe,it,expect } from 'vitest';
-import { Random,upgradeChoices,newSave,parseSave,finishRun,SaveStore,activeSynergies,type Build } from '../src/model';
+import { Random,upgradeChoices,newSave,parseSave,finishRun,openingTipsEnabled,SaveStore,activeSynergies,type Build } from '../src/model';
 import { ABILITIES } from '../src/content';
 describe('upgrade and progression rules',()=>{
   it('replays random sequences from a seed',()=>{const a=new Random(123),b=new Random(123);expect(Array.from({length:30},()=>a.next())).toEqual(Array.from({length:30},()=>b.next()));});
@@ -19,6 +19,16 @@ describe('save boundary',()=>{
     old.settings.showEnemyHealth=false;
     expect(parseSave(old).settings.showEnemyHealthNumbers).toBe(true);
     expect(parseSave(JSON.parse(JSON.stringify(old))).settings.showEnemyHealth).toBe(false);
+  });
+  it('defaults to the first run and respects an explicit opening guide preference across saves',()=>{
+    const save=newSave();
+    expect(openingTipsEnabled(parseSave(save))).toBe(true);
+    save.runs=1;
+    expect(openingTipsEnabled(parseSave(save))).toBe(false);
+    save.settings.showOpeningTips=true;
+    expect(openingTipsEnabled(parseSave(JSON.parse(JSON.stringify(save))))).toBe(true);
+    save.runs=0;save.settings.showOpeningTips=false;
+    expect(openingTipsEnabled(parseSave(save))).toBe(false);
   });
   it('round-trips and clamps volume',()=>{const s=newSave();s.settings.music=8;expect(parseSave(JSON.parse(JSON.stringify(s))).settings.music).toBe(1);});
   it('recovers from corrupt storage and reports blocked writes',()=>{const store=new SaveStore({getItem:()=>'{',setItem:()=>{throw new Error('quota')}});expect(store.data.runs).toBe(0);expect(store.warning).toBeTruthy();expect(store.write()).toBe(false);});

@@ -15,7 +15,7 @@ import {DIFFICULTIES,readDifficulty,type Difficulty} from './difficulty';
 import { Combat } from './combat';
 import { ForestScene } from './scene';
 import { MASTERY_LEVEL, ABILITIES, ACHIEVEMENTS, SYNERGIES, ability, type UpgradeId } from './content';
-import { SaveStore, finishRun, unlockedWeapons, xpNeeded } from './model';
+import { SaveStore, finishRun, openingTipsEnabled, unlockedWeapons, xpNeeded } from './model';
 
 const store = new SaveStore({
   getItem: key => localStorage.getItem(key),
@@ -40,7 +40,7 @@ function home() {
   page='home'; run=undefined; scene.setPaused(true); scene.sim=undefined;
   audio.combat=false; audio.paused=false;
   hud.hidden=true; panel.hidden=false; app.className='cover';
-  panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?(store.data.checkpoint?action('restore','继续',true):action('select','开始游戏',true)):'<button disabled>游戏加载中…</button>'}${action('camp','营地训练')}${action('journal','守夜手记')}${action('settings','设置')}</nav><small>v1.17.2</small>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
+  panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?(store.data.checkpoint?action('restore','继续',true):action('select','开始游戏',true)):'<button disabled>游戏加载中…</button>'}${action('camp','营地训练')}${action('journal','守夜手记')}${action('settings','设置')}</nav><small>v1.17.3</small>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
 }
 let chosenJob:Job='mage';
 let banked=0,lastCheckpoint=-10;
@@ -98,7 +98,7 @@ function journal() {
 }
 function settings() {
   page='settings';const s=store.data.settings;
-  sheet('设置',`<div class="options">${(['music','sound'] as const).map(k=>`<label>${k==='music'?'音乐':'音效'}<input type="range" data-key="${k}" min="0" max="1" step=".05" value="${s[k]}"></label>`).join('')}<label>精简特效<input type="checkbox" data-key="quality" ${s.quality==='low'?'checked':''}></label><label>怪物血条<input type="checkbox" data-key="showEnemyHealth" ${s.showEnemyHealth?'checked':''}></label><label class="health-numbers">血量数字<input type="checkbox" data-key="showEnemyHealthNumbers" ${s.showEnemyHealth&&s.showEnemyHealthNumbers?'checked':''} ${s.showEnemyHealth?'':'disabled'}></label><label>显示帧率<input type="checkbox" data-key="showFps" ${s.showFps?'checked':''}></label></div><input id="import" type="file" accept="application/json,.json" hidden><p id="notice">${store.warning}</p>`,action('export','导出存档')+action('import','导入存档')+action(run&&!run.ended?'pause':'home','返回',true));
+  sheet('设置',`<div class="options">${(['music','sound'] as const).map(k=>`<label>${k==='music'?'音乐':'音效'}<input type="range" data-key="${k}" min="0" max="1" step=".05" value="${s[k]}"></label>`).join('')}<label>精简特效<input type="checkbox" data-key="quality" ${s.quality==='low'?'checked':''}></label><label>怪物血条<input type="checkbox" data-key="showEnemyHealth" ${s.showEnemyHealth?'checked':''}></label><label class="health-numbers">血量数字<input type="checkbox" data-key="showEnemyHealthNumbers" ${s.showEnemyHealth&&s.showEnemyHealthNumbers?'checked':''} ${s.showEnemyHealth?'':'disabled'}></label><label>开局操作指引<input type="checkbox" data-key="showOpeningTips" ${openingTipsEnabled(store.data)?'checked':''}></label><label>显示帧率<input type="checkbox" data-key="showFps" ${s.showFps?'checked':''}></label></div><input id="import" type="file" accept="application/json,.json" hidden><p id="notice">${store.warning}</p>`,action('export','导出存档')+action('import','导入存档')+action(run&&!run.ended?'pause':'home','返回',true));
   el<HTMLInputElement>('import').onchange=async e=>{
     const f=(e.target as HTMLInputElement).files?.[0];if(!f)return;
     try{if(f.size>100000)throw Error('存档过大');if(run&&!run.ended){el('notice').textContent='请先结束本局再导入';return;}store.import(await f.text());syncAudio();scene.refreshEnemyHealth();settings();el('notice').textContent=store.warning||'存档已导入';}
@@ -193,7 +193,7 @@ function updateHealth(s:Combat){
   el<HTMLMeterElement>('hp').value=s.player.hp/s.player.maxHp;
 }
 function updateHud(s:Combat,stats:FrameStats) {
-  checkpoint();battleHud.update(s);updateHealth(s);
+  checkpoint();battleHud.update(s,openingTipsEnabled(store.data));updateHealth(s);
   const purse='金币 '+s.coins;if(el('gold').textContent!==purse)el('gold').textContent=purse;
   const mastery=el('mastery');
   const status=!s.masteryActive?'':s.pathId==='hazel'?'游雷 · '+Math.floor(s.stormCharge*100)+'%':
@@ -256,6 +256,10 @@ panel.oninput=e=>{
     scene.refreshEnemyHealth();
   }else if(key==='showEnemyHealthNumbers' && store.data.settings.showEnemyHealth){
     store.data.settings.showEnemyHealthNumbers=input.checked;scene.refreshEnemyHealth();
+  }
+  else if(key==='showOpeningTips'){
+    store.data.settings.showOpeningTips=input.checked;
+    if(run&&!run.ended)battleHud.update(run,input.checked);
   }
   else if(key==='showFps')store.data.settings.showFps=input.checked;
   else return;syncAudio();store.write();

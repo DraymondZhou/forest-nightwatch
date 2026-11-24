@@ -33,7 +33,7 @@ export class BattleHud {
     this.pulse!.currentTime=0;this.pulse!.play();
   }
 
-  update(s:Combat){
+  update(s:Combat,showOpeningTips:boolean){
     const ready=s.dashCooldown<=0;
     this.dash.setAttribute('aria-disabled',String(!ready));
     this.cooldown.textContent=ready?'就绪':s.dashCooldown.toFixed(1)+'s';
@@ -54,8 +54,8 @@ export class BattleHud {
         this.task.textContent+='　|　'+(Math.hypot(dx,dy)<=52?'开箱 '+Math.floor(cache.charge/RITUAL_TIME*100)+'%':dir+' 守卫宝箱');
       }
     }else if(s.flameTime>0)this.task.textContent='借火　'+Math.ceil(s.flameTime)+'s';
-    else if(s.seconds<7)this.task.textContent=s.path.job==='warden'?'靠近挥刀，横移躲开敌人的挥砍':s.path.job==='hunter'?'拉开距离，箭能穿过敌群':'移动引敌，法术自动攻击';
-    else if(s.seconds<11)this.task.textContent='拾取种荚升级 · 遇险时闪避';
+    else if(showOpeningTips && s.seconds<7)this.task.textContent=s.path.job==='warden'?'靠近挥刀，横移躲开敌人的挥砍':s.path.job==='hunter'?'拉开距离，箭能穿过敌群':'移动引敌，法术自动攻击';
+    else if(showOpeningTips && s.seconds<11)this.task.textContent='拾取种荚升级 · 遇险时闪避';
     else this.task.textContent='';
   }
 }

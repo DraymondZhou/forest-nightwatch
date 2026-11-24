@@ -36,9 +36,10 @@ export const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n
 export interface RunSummary { job:Job; seconds:number; kills:number; won:boolean; level:number; synergy:boolean; seed:number }
 export interface Save extends Purse {
   checkpoint?:string; trials?:Job[]; equipment?:Job[]; version:1; relics:RelicId[]; runs:number; kills:number; bestTime:number; wins:CharacterId[]; jobWins:Job[]; achievements:string[];
-  settings:{difficulty:Difficulty;music:number;sound:number;quality:'high'|'low';showFps:boolean;showEnemyHealth:boolean;showEnemyHealthNumbers:boolean};
+  settings:{difficulty:Difficulty;music:number;sound:number;quality:'high'|'low';showOpeningTips?:boolean;showFps:boolean;showEnemyHealth:boolean;showEnemyHealthNumbers:boolean};
 }
 export const newSave=():Save=>({trials:[],equipment:[],relics:[],gold:0,training:freshRanks(),version:1,runs:0,kills:0,bestTime:0,wins:[],jobWins:[],achievements:[],settings:{difficulty:'normal',music:0.3,sound:0.5,quality:'high',showFps:false,showEnemyHealth:true,showEnemyHealthNumbers:false}});
+export const openingTipsEnabled=(save:Save)=>save.settings.showOpeningTips ?? (save.runs===0);
 export function parseSave(value:unknown):Save {
   if(!value||typeof value!=='object') throw new Error('存档格式无效');
   const s=value as Save;
@@ -50,7 +51,7 @@ export function parseSave(value:unknown):Save {
   if(!s.settings||!Number.isFinite(s.settings.music)||!Number.isFinite(s.settings.sound)) throw new Error('设置无效');
   if(s.relics!==undefined && (!Array.isArray(s.relics)||!s.relics.every(isRelic)))throw Error('遗物记录无效');
   const jobs=(list:unknown)=>Array.isArray(list)?[...new Set(list.filter((j):j is Job=>['mage','warden','hunter'].includes(j)))]:[];
-  return {trials:jobs(s.trials),equipment:jobs(s.equipment).filter(j=>jobs(s.trials).includes(j)),checkpoint:typeof s.checkpoint==='string'?s.checkpoint:undefined,relics:[...new Set(s.relics??[])],...readPurse(s),version:1,runs:Math.floor(s.runs),kills:Math.floor(s.kills),bestTime:Math.min(480,s.bestTime),wins:[...new Set(s.wins)],jobWins:[...new Set(s.jobWins??[])],achievements:[...new Set(s.achievements)],settings:{difficulty:readDifficulty(s.settings.difficulty),music:clamp(s.settings.music,0,1),sound:clamp(s.settings.sound,0,1),quality:s.settings.quality==='low'?'low':'high',showFps:s.settings.showFps===true,showEnemyHealth:s.settings.showEnemyHealth!==false,showEnemyHealthNumbers:s.settings.showEnemyHealthNumbers===true}};
+  return {trials:jobs(s.trials),equipment:jobs(s.equipment).filter(j=>jobs(s.trials).includes(j)),checkpoint:typeof s.checkpoint==='string'?s.checkpoint:undefined,relics:[...new Set(s.relics??[])],...readPurse(s),version:1,runs:Math.floor(s.runs),kills:Math.floor(s.kills),bestTime:Math.min(480,s.bestTime),wins:[...new Set(s.wins)],jobWins:[...new Set(s.jobWins??[])],achievements:[...new Set(s.achievements)],settings:{difficulty:readDifficulty(s.settings.difficulty),music:clamp(s.settings.music,0,1),sound:clamp(s.settings.sound,0,1),quality:s.settings.quality==='low'?'low':'high',showOpeningTips:typeof s.settings.showOpeningTips==='boolean'?s.settings.showOpeningTips:undefined,showFps:s.settings.showFps===true,showEnemyHealth:s.settings.showEnemyHealth!==false,showEnemyHealthNumbers:s.settings.showEnemyHealthNumbers===true}};
 }
 export function finishRun(save:Save,run:RunSummary):string[] {
   const before=new Set(save.achievements); save.runs++; save.kills+=run.kills; save.bestTime=Math.max(save.bestTime,run.seconds);
