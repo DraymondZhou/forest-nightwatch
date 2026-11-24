@@ -35,10 +35,10 @@ export const xpNeeded=(level:number)=>Math.round(9+level*3.8+level*level*0.12);
 export const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n));
 export interface RunSummary { job:Job; seconds:number; kills:number; won:boolean; level:number; synergy:boolean; seed:number }
 export interface Save extends Purse {
-  version:1; relics:RelicId[]; runs:number; kills:number; bestTime:number; wins:CharacterId[]; jobWins:Job[]; achievements:string[];
+  checkpoint?:string; trials?:Job[]; equipment?:Job[]; version:1; relics:RelicId[]; runs:number; kills:number; bestTime:number; wins:CharacterId[]; jobWins:Job[]; achievements:string[];
   settings:{difficulty:Difficulty;music:number;sound:number;quality:'high'|'low';showFps:boolean;showEnemyHealth:boolean;showEnemyHealthNumbers:boolean};
 }
-export const newSave=():Save=>({relics:[],gold:0,training:freshRanks(),version:1,runs:0,kills:0,bestTime:0,wins:[],jobWins:[],achievements:[],settings:{difficulty:'normal',music:0.3,sound:0.5,quality:'high',showFps:false,showEnemyHealth:true,showEnemyHealthNumbers:false}});
+export const newSave=():Save=>({trials:[],equipment:[],relics:[],gold:0,training:freshRanks(),version:1,runs:0,kills:0,bestTime:0,wins:[],jobWins:[],achievements:[],settings:{difficulty:'normal',music:0.3,sound:0.5,quality:'high',showFps:false,showEnemyHealth:true,showEnemyHealthNumbers:false}});
 export function parseSave(value:unknown):Save {
   if(!value||typeof value!=='object') throw new Error('存档格式无效');
   const s=value as Save;
@@ -49,7 +49,8 @@ export function parseSave(value:unknown):Save {
   if(!Array.isArray(s.achievements)||!s.achievements.every(id=>['first','survivor','hunter','synergy','dawn','master'].includes(id))) throw new Error('成就记录无效');
   if(!s.settings||!Number.isFinite(s.settings.music)||!Number.isFinite(s.settings.sound)) throw new Error('设置无效');
   if(s.relics!==undefined && (!Array.isArray(s.relics)||!s.relics.every(isRelic)))throw Error('遗物记录无效');
-  return {relics:[...new Set(s.relics??[])],...readPurse(s),version:1,runs:Math.floor(s.runs),kills:Math.floor(s.kills),bestTime:Math.min(480,s.bestTime),wins:[...new Set(s.wins)],jobWins:[...new Set(s.jobWins??[])],achievements:[...new Set(s.achievements)],settings:{difficulty:readDifficulty(s.settings.difficulty),music:clamp(s.settings.music,0,1),sound:clamp(s.settings.sound,0,1),quality:s.settings.quality==='low'?'low':'high',showFps:s.settings.showFps===true,showEnemyHealth:s.settings.showEnemyHealth!==false,showEnemyHealthNumbers:s.settings.showEnemyHealthNumbers===true}};
+  const jobs=(list:unknown)=>Array.isArray(list)?[...new Set(list.filter((j):j is Job=>['mage','warden','hunter'].includes(j)))]:[];
+  return {trials:jobs(s.trials),equipment:jobs(s.equipment).filter(j=>jobs(s.trials).includes(j)),checkpoint:typeof s.checkpoint==='string'?s.checkpoint:undefined,relics:[...new Set(s.relics??[])],...readPurse(s),version:1,runs:Math.floor(s.runs),kills:Math.floor(s.kills),bestTime:Math.min(480,s.bestTime),wins:[...new Set(s.wins)],jobWins:[...new Set(s.jobWins??[])],achievements:[...new Set(s.achievements)],settings:{difficulty:readDifficulty(s.settings.difficulty),music:clamp(s.settings.music,0,1),sound:clamp(s.settings.sound,0,1),quality:s.settings.quality==='low'?'low':'high',showFps:s.settings.showFps===true,showEnemyHealth:s.settings.showEnemyHealth!==false,showEnemyHealthNumbers:s.settings.showEnemyHealthNumbers===true}};
 }
 export function finishRun(save:Save,run:RunSummary):string[] {
   const before=new Set(save.achievements); save.runs++; save.kills+=run.kills; save.bestTime=Math.max(save.bestTime,run.seconds);
@@ -61,9 +62,13 @@ export function finishRun(save:Save,run:RunSummary):string[] {
 export const unlockedWeapons=(save:Save)=>['spark','spore','leaf','ember',...(save.achievements.includes('hunter')?['comet']:[]),...(save.achievements.includes('synergy')?['frost']:[])];
 export class SaveStore {
   readonly key='forest-nightwatch-v1'; warning=''; data:Save;
+  private protectedSave=false;
+  private lastRaw:string|null=null;
   constructor(private storage:Pick<Storage,'getItem'|'setItem'>) {
-    this.data=newSave(); try {const raw=storage.getItem(this.key); if(raw) this.data=parseSave(JSON.parse(raw));} catch {this.warning='无法读取旧存档，已使用临时新档；旧数据未覆盖。请先导入备份。';}
+    this.data=newSave(); try {const raw=this.lastRaw=storage.getItem(this.key); if(raw) this.data=parseSave(JSON.parse(raw));} catch {this.protectedSave=true;this.warning='无法读取旧存档，已使用临时新档；旧数据未覆盖。请先导入备份。';}
   }
-  write() {try{this.storage.setItem(this.key,JSON.stringify(this.data));this.warning='';return true;}catch{this.warning='浏览器无法保存进度，请导出存档备份。';return false;}}
-  import(raw:string) {const parsed=parseSave(JSON.parse(raw)); this.data=parsed; return this.write();}
+  write() {if(this.protectedSave)return false;try{if(this.storage.getItem(this.key)!==this.lastRaw){this.warning='另一页已保存进度，请刷新后继续';return false;}
+    const raw=JSON.stringify(this.data);this.storage.setItem(this.key,raw);this.lastRaw=raw;this.warning='';return true;}catch{this.warning='浏览器无法保存进度，请导出存档备份。';return false;}}
+  import(raw:string) {const parsed=parseSave(JSON.parse(raw)); const original=this.storage.getItem(this.key);if(original)this.storage.setItem(this.key+'-backup',original);
+    delete parsed.checkpoint;this.lastRaw=original;this.protectedSave=false;this.data=parsed; return this.write();}
 }

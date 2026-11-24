@@ -28,6 +28,7 @@ export class ForestScene extends Phaser.Scene {
   private jobField!:InkMarks;private jobHits!:InkMarks;private fieldMarks!:InkMarks;private hitMarks!:InkMarks;private stormMarks!:InkMarks;private dashQueued=false;
   private health!:EnemyHealth;
   private pickups!: PickupSprites;
+  private cacheMarker!: Phaser.GameObjects.Image;
   private readonly visibleEnemies = new Set<number>();
   private readonly remains: {sprite:Phaser.GameObjects.Image; x:number; y:number; dx:number; dy:number; age:number; size:number}[] = [];
   private remainCursor = 0;
@@ -41,13 +42,13 @@ export class ForestScene extends Phaser.Scene {
   constructor(hooks:SceneHooks){super('forest');this.hooks=hooks;}
   preload(){
     this.load.spritesheet('hunter-motion',art('hunter-motion.png'),{frameWidth:128,frameHeight:128});
-    this.load.spritesheet('martial-heroes',art('martial-heroes.png'),{frameWidth:128,frameHeight:128});
     this.load.atlas('hurt-faces',art('hurt-faces.png'),hurtFaces);
     this.load.spritesheet('mini-bosses',art('mini-bosses.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('profession-marks',art('profession-marks.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('field',art('field-marks.png'),{frameWidth:96,frameHeight:96});
     this.load.spritesheet('storm-impact',art('storm-impact.png'),{frameWidth:64,frameHeight:64});
     this.load.image('coin',art('coin.png'));
+    this.load.image('thorn-cache',art('thorn-cache.png'));
     this.load.spritesheet('pickups',art('pickups.png'),{frameWidth:64,frameHeight:64});
     this.load.image('ground',art('woodcut-ground.webp'));this.load.image('props',art('woodcut-props.png'));this.load.spritesheet('enemies',art('enemy-poses.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('grip',art('grip-parts.png'),{frameWidth:128,frameHeight:128});
@@ -64,7 +65,9 @@ export class ForestScene extends Phaser.Scene {
     this.health=new EnemyHealth(this);
     this.woundText=this.add.bitmapText(0,0,HEALTH_FONT,'',14).setTint(0xffa59c).setDepth(6000).setVisible(false);
     this.woods=new Woodland(this);this.pickups=new PickupSprites(this);
-    this.warningInk=this.add.graphics().setDepth(3);this.worldInk=this.add.graphics().setDepth(-1);this.fxInk=this.add.graphics().setDepth(5000);this.stickInk=this.add.graphics().setScrollFactor(0).setDepth(10000);
+    this.cacheMarker=this.add.image(0,0,'thorn-cache').setOrigin(.5,.85).setDisplaySize(85,77).setDepth(3).setVisible(false);
+    // Keep incoming shots and attack silhouettes legible through allied lightning and impacts.
+    this.warningInk=this.add.graphics().setDepth(5003);this.worldInk=this.add.graphics().setDepth(-1);this.fxInk=this.add.graphics().setDepth(5000);this.stickInk=this.add.graphics().setScrollFactor(0).setDepth(10000);
     for(let i=0;i<28;i++)this.texts.push(this.add.text(0,0,'',{fontFamily:'Georgia, serif',fontSize:'17px',color:'#f4dfb4',stroke:'#15332d',strokeThickness:3}).setDepth(6000).setVisible(false));
 
     this.keys=this.input.keyboard?.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT') as Record<string,Phaser.Input.Keyboard.Key>;
@@ -116,6 +119,7 @@ export class ForestScene extends Phaser.Scene {
     for(const r of this.remains){r.age=1;r.sprite.setVisible(false);}
     this.tweens.killTweensOf(this.woundText);this.woundText.setVisible(false);
     this.fxInk.clear();this.worldInk.clear();this.warningInk.clear();this.health.begin();this.health.end();
+    this.cacheMarker.setVisible(false);
     this.lastGather=-1;this.stickState='';
     this.sim=sim;this.previousX=sim.player.x;this.previousY=sim.player.y;this.accumulator=0;this.uiClock=0;this.frameStats.reset();this.effects=[];
     this.sprites.forEach(s=>{s.setVisible(false);this.spritePool.push(s)});this.sprites.clear();this.texts.forEach(t=>t.setVisible(false));
@@ -231,6 +235,16 @@ export class ForestScene extends Phaser.Scene {
     const sim=this.sim!,g=this.worldInk;g.clear();this.warningInk.clear();this.fieldMarks.begin();this.jobField.begin();
     const view=this.cameras.main.worldView;
     const visible=(x:number,y:number,margin:number)=>x>=view.left-margin && x<=view.right+margin && y>=view.top-margin && y<=view.bottom+margin;
+    const cache=sim.cacheSite;
+    if(cache && visible(cache.x,cache.y,78)){
+      this.cacheMarker.setVisible(true).setPosition(cache.x,cache.y);
+      g.fillStyle(0xb89860,.09);g.fillCircle(cache.x,cache.y,52);
+      g.lineStyle(1,0xe0bb7b,.8);g.strokeCircle(cache.x,cache.y,52);
+      if(cache.charge>0){
+        const progress=Math.min(1,cache.charge/RITUAL_TIME);
+        g.lineStyle(3,0xf2d89e,.95);g.beginPath();g.arc(cache.x,cache.y,52,-Math.PI/2,-Math.PI/2+2*Math.PI*progress);g.strokePath();
+      }
+    }else this.cacheMarker.setVisible(false);
     if(sim.shrine){
       const lamp=sim.shrine;
       g.fillStyle(0xa9bc72,.13);g.fillCircle(lamp.x,lamp.y,52);
@@ -291,7 +305,7 @@ export class ForestScene extends Phaser.Scene {
     for(const shot of sim.shots){
       if(!visible(shot.x,shot.y,36))continue;
       const angle=Math.atan2(shot.vy,shot.vx);
-      if(shot.weapon==='enemy'){drawEnemyMissile(g,shot.x,shot.y,angle,shot.missile??'seed');continue;}
+      if(shot.weapon==='enemy'){drawEnemyMissile(this.warningInk,shot.x,shot.y,angle,shot.missile??'seed');continue;}
       if(sim.path.job==='hunter' && (shot.weapon==='ember'||shot.weapon==='comet'||(shot.weapon==='bow'&&sim.build.ember))){
         this.jobField.paint(shot.weapon==='comet'?1:0,shot.x,shot.y,shot.weapon==='comet'?60:56,angle);
         continue;

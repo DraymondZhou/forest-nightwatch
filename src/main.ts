@@ -1,3 +1,4 @@
+import {packRun,unpackRun} from './checkpoint';
 import {ATTACK_NOTES} from './attackNotes';
 import {RELICS,relicsFor,relicIds,isRelic} from './relics';
 import {TRAINING,train,maxHealth,walkSpeed,type TrainingId} from './camp';
@@ -39,11 +40,28 @@ function home() {
   page='home'; run=undefined; scene.setPaused(true); scene.sim=undefined;
   audio.combat=false; audio.paused=false;
   hud.hidden=true; panel.hidden=false; app.className='cover';
-  panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?action('select','开始游戏',true):'<button disabled>游戏加载中…</button>'}${action('camp','营地训练')}${action('journal','守夜手记')}${action('settings','设置')}</nav>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
+  panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?(store.data.checkpoint?action('restore','继续',true):action('select','开始游戏',true)):'<button disabled>游戏加载中…</button>'}${action('camp','营地训练')}${action('journal','守夜手记')}${action('settings','设置')}</nav><small>v1.15.0</small>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
 }
 let chosenJob:Job='mage';
-let banked=0;
-function bankCoins(){if(run && run.coins>banked){store.data.gold+=run.coins-banked;banked=run.coins;store.write();}}
+let banked=0,lastCheckpoint=-10;
+const trialText={mage:['雷行满电击中首领','导火石','闪避使主法术冷却缩短 0.35 秒'],warden:['重斩第三刀命中首领','卸力扣','重击或反击命中，闪避冷却缩短 1 秒'],hunter:['穿杨在 20 步外射中首领','轻羽靴','闪避冷却缩短至 3.8 秒']};
+function checkpoint(force=false){
+  if(!run||run.ended||page==='result')return;
+  if(!force && run.seconds-lastCheckpoint<5 && run.coins===banked)return;
+  bankCoins();store.data.checkpoint=packRun(run,page==='upgrade'?shownOffer:undefined);
+  store.write();lastCheckpoint=run.seconds;
+}
+function restore(){
+  if(!store.data.checkpoint)return;
+  try{
+    const saved=unpackRun(store.data.checkpoint);
+    launch(saved.game);
+    if(saved.game.relicPending)chooseRelic();else if(saved.game.giftPending)chooseGift();
+    else if(saved.game.pendingLevels)upgrade(saved.offer);else pause();
+  }catch{sheet('本局记录无法读取','<p>可以重新开局，营地进度仍可使用。</p>',action('select','重新开局')+action('home','返回'));}
+}
+
+function bankCoins(){if(run && run.coins>banked){store.data.gold+=run.coins-banked;banked=run.coins;}}
 function choosePath(job:Job){
   chosenJob=job;page='path';
   const cards=Object.entries(PATHS).filter(([,p])=>p.job===job).map(([id,p])=>`<button class="card" data-action="path-${id}"><b class="rune">${ability(p.weapon).icon}</b><strong>${p.name}</strong><span>${p.tip}</span><small>六级 · ${p.mastery.name}</small></button>`).join('');
@@ -54,7 +72,7 @@ function select() {
   const cards=Object.entries(JOBS).map(([id,j])=>`<button class="card job-card" data-action="job-${id}"><img alt="" src="${art('job-'+id+'.png')}"><strong>${j.name}</strong><span>${j.tip}</span></button>`).join('');
   const difficulty=store.data.settings.difficulty;
   const modes=(Object.keys(DIFFICULTIES) as Difficulty[]).map(id=>`<label><input type="radio" name="difficulty" data-key="difficulty" value="${id}" ${id===difficulty?'checked':''}><span>${DIFFICULTIES[id].label}</span></label>`).join('');
-  sheet('选择职业',`<fieldset class="difficulty"><legend>本局难度</legend>${modes}</fieldset><p id="mode-hint" aria-live="polite">${DIFFICULTIES[difficulty].description}</p><div class="cards">${cards}</div><p>方向键或左摇杆移动，空格或右侧按钮闪避。角色会自动攻击。<br>3 分钟出现小首领，6 分钟出现古树守卫。</p>`,action('home','返回'));
+  sheet('选择职业',`<fieldset class="difficulty"><legend>本局难度</legend>${modes}</fieldset><p id="mode-hint" aria-live="polite">${DIFFICULTIES[difficulty].description}</p><div class="cards">${cards}</div><p>方向键或左摇杆移动，空格或右侧按钮闪避。角色会自动攻击。<br>3 分钟迎战小首领。6 分钟古树出现，8 分钟前击败它。</p>`,action('home','返回'));
 }
 function camp(){
   page='camp';const save=store.data;
@@ -62,7 +80,11 @@ function camp(){
     const t=TRAINING[k],rank=save.training[k],cost=t.cost[rank],value=k==='health'?maxHealth(save.training):walkSpeed(save.training)/10;
     return `<div class="training-row"><div><strong>${t.name}</strong>　<small>${rank}/5</small><p>${value} ${t.unit}${cost===undefined?' · 已满级':' → '+(value+t.step)+' '+t.unit}</p></div><button data-action="train-${k}" ${cost===undefined||save.gold<cost?'disabled':''}>${cost===undefined?'已满级':cost+' 金币'}</button></div>`;
   }).join('');
-  sheet('营地训练',`<p class="purse">持有金币　<b>${save.gold}</b></p><p>训练对所有职业永久生效。普通怪有机会掉金币，精英掉率更高，首领必掉。拾取后即存入营地。</p>${rows}<small>${store.warning}</small>`,action('home','返回'));
+  const gear=(Object.keys(trialText) as Job[]).map(j=>{
+    const [goal,name,tip]=trialText[j],done=save.trials?.includes(j),owned=save.equipment?.includes(j);
+    return `<div class="training-row"><div><strong>${name} · ${JOBS[j].name}</strong><p>${done?tip:goal}</p></div><button data-action="forge-${j}" ${!done||owned||save.gold<24?'disabled':''}>${owned?'已装备':done?'24 金币':'未解锁'}</button></div>`;
+  }).join('');
+  sheet('营地训练',`<p class="purse">持有金币　<b>${save.gold}</b></p><p>训练对所有职业永久生效。普通怪有机会掉金币，精英掉率更高，首领必掉。拾取后即存入营地。</p>${rows}<h3>职业装备</h3>${gear}<small>${store.warning}</small>`,action('home','返回'));
 }
 function journal() {
   page='journal';
@@ -76,25 +98,28 @@ function journal() {
 }
 function settings() {
   page='settings';const s=store.data.settings;
-  sheet('设置',`<div class="options">${(['music','sound'] as const).map(k=>`<label>${k==='music'?'音乐':'音效'}<input type="range" data-key="${k}" min="0" max="1" step=".05" value="${s[k]}"></label>`).join('')}<label>精简特效<input type="checkbox" data-key="quality" ${s.quality==='low'?'checked':''}></label><label>怪物血条<input type="checkbox" data-key="showEnemyHealth" ${s.showEnemyHealth?'checked':''}></label><label class="health-numbers">血量数字<input type="checkbox" data-key="showEnemyHealthNumbers" ${s.showEnemyHealth&&s.showEnemyHealthNumbers?'checked':''} ${s.showEnemyHealth?'':'disabled'}></label><label>显示帧率<input type="checkbox" data-key="showFps" ${s.showFps?'checked':''}></label></div><input id="import" type="file" accept="application/json,.json" hidden><p id="notice">${store.warning}</p>`,action('export','导出存档')+action('import','导入存档')+action(run?'pause':'home','返回',true));
+  sheet('设置',`<div class="options">${(['music','sound'] as const).map(k=>`<label>${k==='music'?'音乐':'音效'}<input type="range" data-key="${k}" min="0" max="1" step=".05" value="${s[k]}"></label>`).join('')}<label>精简特效<input type="checkbox" data-key="quality" ${s.quality==='low'?'checked':''}></label><label>怪物血条<input type="checkbox" data-key="showEnemyHealth" ${s.showEnemyHealth?'checked':''}></label><label class="health-numbers">血量数字<input type="checkbox" data-key="showEnemyHealthNumbers" ${s.showEnemyHealth&&s.showEnemyHealthNumbers?'checked':''} ${s.showEnemyHealth?'':'disabled'}></label><label>显示帧率<input type="checkbox" data-key="showFps" ${s.showFps?'checked':''}></label></div><input id="import" type="file" accept="application/json,.json" hidden><p id="notice">${store.warning}</p>`,action('export','导出存档')+action('import','导入存档')+action(run&&!run.ended?'pause':'home','返回',true));
   el<HTMLInputElement>('import').onchange=async e=>{
     const f=(e.target as HTMLInputElement).files?.[0];if(!f)return;
-    try{if(f.size>100000)throw Error('存档过大');store.import(await f.text());syncAudio();scene.refreshEnemyHealth();settings();el('notice').textContent=store.warning||'存档已导入';}
+    try{if(f.size>100000)throw Error('存档过大');if(run&&!run.ended){el('notice').textContent='请先结束本局再导入';return;}store.import(await f.text());syncAudio();scene.refreshEnemyHealth();settings();el('notice').textContent=store.warning||'存档已导入';}
     catch{el('notice').textContent='无法导入，请选择有效的守夜存档。';}
   };
 }
 function syncAudio(){audio.music=store.data.settings.music;audio.sound=store.data.settings.sound;}
 function start(path:PathId) {
-  banked=0;
   if(!ready)return;
-  run=new Combat(path,crypto.getRandomValues(new Uint32Array(1))[0],store.data.settings.difficulty,store.data.training);page='battle';app.className='';
+  const game=new Combat(path,crypto.getRandomValues(new Uint32Array(1))[0],store.data.settings.difficulty,store.data.training);
+  game.kit=!!store.data.equipment?.includes(game.path.job);launch(game);checkpoint(true);
+}
+function launch(game:Combat){
+  run=game;banked=game.coins;lastCheckpoint=game.seconds;shownOffer=[];page='battle';app.className='';
   panel.hidden=true;hud.hidden=false;audio.combat=true;audio.paused=false;
   battleHud.reset(store.data.settings.quality==='low');scene.begin(run);if(portrait.matches)pause();
 }
 function pause(){
   if(!run||run.ended||run.pendingLevels||run.giftPending||run.relicPending)return;
-  page='pause';scene.setPaused(true);audio.paused=true;
-  sheet('本局构筑',buildPanel(run,clock(run.seconds)),action('resume','继续',true)+action('settings','设置')+action('retreat','结束本局'));
+  page='pause';checkpoint(true);scene.setPaused(true);audio.paused=true;
+  sheet('本局构筑',buildPanel(run,clock(run.seconds))+(run.queued?'<p>连升 · '+ability(run.queued.id,run.path.job).name+'（剩 '+run.queued.left+' 次）</p>'+action('cancel-queue','取消连升'):''),action('resume','继续',true)+action('settings','设置')+action('retreat','结束本局'));
   panel.querySelector('.sheet')!.classList.add('build-sheet');
 }
 function resume(){
@@ -103,23 +128,25 @@ function resume(){
 }
 function chooseRelic(){
   if(!run?.relicPending)return;
-  page='relic';scene.setPaused(true);audio.play('level');
+  page='relic';checkpoint(true);scene.setPaused(true);audio.play('level');
   const cards=relicsFor(run.path.job).map(id=>{const r=RELICS[id];return `<button class="card relic-card" data-action="relic-${id}"><img src="${art('relic-'+id+'.png')}" alt=""><small>${r.style}</small><strong>${r.name}</strong><span>${r.tip}</span></button>`}).join('');
   sheet('选择首领遗物',`<p>选 1 件，本局生效。</p><div class="cards">${cards}</div>`,'');
 }
 function chooseGift(){
   if(!run)return;
-  page='gift';scene.setPaused(true);audio.play('level');
+  page='gift';checkpoint(true);scene.setPaused(true);audio.play('level');
   const heal=Math.ceil(run.player.maxHp*.30);
   sheet('林灯已亮','<p>灯芯留住了这片林间的光。选择一项祝福。</p><div class="cards"><button class="card" data-action="gift-spring"><strong>饮泉</strong><span>立即恢复 '+heal+' 生命。当前 '+Math.ceil(run.player.hp)+' / '+run.player.maxHp+'。</span></button><button class="card" data-action="gift-flame"><strong>借火</strong><span>接下来 45 秒，造成的伤害提高 30%。</span></button></div>','');
 }
 function afterChoice(){
   if(!run)return;
+  run.settleQueued();
   if(run.relicPending)chooseRelic();
   else if(run.giftPending)chooseGift();
   else if(run.pendingLevels)upgrade();
   else if(portrait.matches||document.hidden)pause();
   else resume();
+  checkpoint(true);
 }
 type Offer=(UpgradeId|'mastery')[];
 let shownOffer:Offer=[];
@@ -127,6 +154,7 @@ function upgrade(replacement?:Offer){
   if(!run)return;
   page='upgrade';scene.setPaused(true);audio.play('level');
   const choices=shownOffer=replacement??run.levelOptions(unlockedWeapons(store.data));
+  checkpoint(true);
   const cards=choices.map(id=>{
     if(id==='mastery'){
       const c=run!.path,talent=c.talent;
@@ -139,19 +167,25 @@ function upgrade(replacement?:Offer){
   const awakened=run.level-run.pendingLevels+1===MASTERY_LEVEL;
   const specialty=run.path.mastery;
   const notice=awakened?`<p class="mastery-notice">专精已开启 · <b>${specialty.name}</b>　${specialty.tip}</p>`:'';
-  const again=run.canReroll(unlockedWeapons(store.data),choices)?action('reroll','换一组（剩 1 次）'):'';
-  sheet('选择一项祝福',`${notice}<div class="cards">${cards||action('take-heal','恢复 20 生命',true)}</div>`,again);
+  const again=run.canReroll(unlockedWeapons(store.data),choices)?action('reroll','换一组（剩 '+run.rerolls+' 次）'):'';
+  const canQueue=choices.some(id=>id!=='mastery' && (run!.build[id]??0)<ABILITIES.find(a=>a.id===id)!.max-1);
+  const queue=canQueue?'<label><input type="checkbox" id="queue-rank"> 后续连升此项（最多 2 级）</label>':'';
+  sheet('选择一项祝福',`${notice}<div class="cards">${cards||action('take-heal','恢复 20 生命',true)}</div>${queue}`,again);
 }
 function end(){
   if(!run||page==='result')return;
   run.ended=true;scene.setPaused(true);audio.paused=false;audio.play(run.won?'win':'lose');
-  bankCoins();const gained=finishRun(store.data,run.summary());store.write();page='result';
+  bankCoins();delete store.data.checkpoint;
+  if(run.trialDone && !store.data.trials?.includes(run.path.job))(store.data.trials??=[]).push(run.path.job);
+  const gained=finishRun(store.data,run.summary());store.write();page='result';
   const fatal=run.fatal;
-  const recap=fatal?`<p><b>致命一击：${ATTACK_NOTES[fatal.kind][0]} · ${fatal.damage} 伤害</b><br>${ATTACK_NOTES[fatal.kind][1]}</p>`:!run.won&&run.seconds>=480?'<p>天亮前未能击败古树守卫。</p>':'';
+  const previous=run.previousHit;
+  const combo=fatal&&previous&&run.seconds-previous.time<=3?'前一击 · '+ATTACK_NOTES[previous.kind][0]+'，相隔 '+(run.seconds-previous.time).toFixed(1)+' 秒。<br>':'';
+  const recap=fatal?`<p><b>致命一击：${ATTACK_NOTES[fatal.kind][0]} · ${fatal.damage} 伤害</b><br>${combo}${ATTACK_NOTES[fatal.kind][1]}</p>`:!run.won&&run.seconds>=480?'<p>天亮前未能击败古树守卫。</p>':'';
   const leading=Object.entries(run.damageByWeapon).sort((a,b)=>b[1]-a[1])[0];
   const tactics='点亮林灯 '+run.shrinesLit+' 座　·　成功闪避 '+run.dodges+' 次'+(leading?'　·　主力技能 '+ability(leading[0] as UpgradeId,run.path.job).name:'');
-  lastSummary=`${recap}<p>${JOBS[run.path.job].name} · ${run.path.name}　·　${run.rules.label}　·　守夜 ${clock(run.seconds)}　·　击败 ${run.kills}　·　等级 ${run.level}</p><p>本局金币 +${run.coins}　·　营地余额 ${store.data.gold}</p><p>${tactics}</p>${run.relic?`<p>本局遗物 · ${RELICS[run.relic].name}</p>`:''}<p>${ABILITIES.filter(a=>run!.build[a.id]).map(a=>ability(a.id,run!.path.job).name+' '+run!.build[a.id]).join('　')}</p>${gained.map(id=>`<p>✦ ${ACHIEVEMENTS.find(a=>a.id===id)!.name}</p>`).join('')}<small>${store.warning}</small>`;
-  hud.hidden=true;sheet(run.won?'黎明已至':'守夜结束',lastSummary,action('again','再来一局',true)+action('camp','营地训练')+action('home','返回主菜单'));
+  lastSummary=`${run.trialDone?'<p>职业挑战完成 · '+trialText[run.path.job][1]+'</p>':''}${recap}<p>${JOBS[run.path.job].name} · ${run.path.name}　·　${run.rules.label}　·　守夜 ${clock(run.seconds)}　·　击败 ${run.kills}　·　等级 ${run.level}</p><p>本局金币 +${run.coins}　·　营地余额 ${store.data.gold}</p><p>${tactics}</p>${run.relic?`<p>本局遗物 · ${RELICS[run.relic].name}</p>`:''}<p>${ABILITIES.filter(a=>run!.build[a.id]).map(a=>ability(a.id,run!.path.job).name+' '+run!.build[a.id]).join('　')}</p>${gained.map(id=>`<p>✦ ${ACHIEVEMENTS.find(a=>a.id===id)!.name}</p>`).join('')}<small>${store.warning}</small>`;
+  hud.hidden=true;sheet(run.won?'黎明已至':'守夜结束',lastSummary,action('again','再来一局',true)+action('select','更换流派')+action('camp','营地训练')+action('home','返回主菜单'));
 }
 let shownSkills='',shownBosses='';
 function updateHealth(s:Combat){
@@ -159,7 +193,7 @@ function updateHealth(s:Combat){
   el<HTMLMeterElement>('hp').value=s.player.hp/s.player.maxHp;
 }
 function updateHud(s:Combat,stats:FrameStats) {
-  bankCoins();battleHud.update(s);updateHealth(s);
+  checkpoint();battleHud.update(s);updateHealth(s);
   const purse='金币 '+s.coins;if(el('gold').textContent!==purse)el('gold').textContent=purse;
   const mastery=el('mastery');
   const status=!s.masteryActive?'':s.pathId==='hazel'?'游雷 · '+Math.floor(s.stormCharge*100)+'%':
@@ -181,23 +215,30 @@ function updateHud(s:Combat,stats:FrameStats) {
 panel.onclick=e=>{
   const btn=(e.target as Element).closest<HTMLButtonElement>('button[data-action]');if(!btn||btn.disabled)return;
   const id=btn.dataset.action!;void audio.start().catch(()=>{});audio.play('click');
-  if(id==='home')home();else if(id==='select'||id==='again'){home();select();}else if(id==='journal')journal();else if(id==='settings')settings();
+  if(id==='home')home();else if(id==='restore')restore();else if(id==='again' && run){start(run.pathId);}else if(id==='select'){home();select();}else if(id==='journal')journal();else if(id==='settings')settings();
   else if(id==='resume')resume();else if(id==='pause')pause();else if(id==='retreat')end();
+  else if(id==='cancel-queue'&&run&&page==='pause'){run.queued=undefined;pause();}
   else if(id==='camp')camp();
+  else if(page==='camp' && id.startsWith('forge-')){
+    const job=id.slice(6) as Job;
+    if(store.data.trials?.includes(job) && !store.data.equipment?.includes(job) && store.data.gold>=24){
+      store.data.gold-=24;(store.data.equipment??=[]).push(job);store.write();camp();
+    }
+  }
   else if(page==='camp' && (id==='train-health'||id==='train-speed')){if(train(store.data,id==='train-health'?'health':'speed'))store.write();camp();}
   else if(page==='job'&&id.startsWith('job-'))choosePath(id.slice(4) as Job);
   else if(page==='path'&&id==='back-job')select();
   else if(page==='path'&&id.startsWith('path-')){const path=id.slice(5) as PathId;if(PATHS[path]?.job===chosenJob)start(path);}
   else if(page==='relic'&&id.startsWith('relic-')&&run){
     const key=id.slice(6);if(isRelic(key)&&run.takeRelic(key)){
-      if(!store.data.relics.includes(key)){store.data.relics.push(key);store.write();}afterChoice();
+      if(!store.data.relics.includes(key)){store.data.relics.push(key);}afterChoice();
     }
   }
   else if(page==='upgrade'&&id==='reroll'&&run){const next=run.reroll(unlockedWeapons(store.data),shownOffer);if(next)upgrade(next);}
   else if((id==='gift-flame'||id==='gift-spring')&&run&&page==='gift'){run.takeGift(id==='gift-flame'?'flame':'spring');afterChoice();}
-  else if(id.startsWith('take-')&&run&&page==='upgrade'){run.resolveLevel(id==='take-heal'?undefined:id.slice(5) as UpgradeId|'mastery');afterChoice();}
+  else if(id.startsWith('take-')&&run&&page==='upgrade'){const pick=id.slice(5) as UpgradeId|'mastery'|'heal';const queue=document.querySelector<HTMLInputElement>('#queue-rank')?.checked;run.resolveLevel(pick==='heal'?undefined:pick);if(queue&&pick!=='heal'&&pick!=='mastery')run.queueUpgrade(pick);afterChoice();}
   else if(id==='import')el('import').click();
-  else if(id==='export'){const url=URL.createObjectURL(new Blob([JSON.stringify(store.data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='forest-nightwatch-save.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}
+  else if(id==='export'){const url=URL.createObjectURL(new Blob([JSON.stringify({...store.data,checkpoint:undefined},null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='forest-nightwatch-save.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}
 };
 panel.oninput=e=>{
   const input=e.target as HTMLInputElement;const key=input.dataset.key;
@@ -221,11 +262,11 @@ panel.oninput=e=>{
 };
 const portrait=matchMedia('(orientation: portrait) and (pointer: coarse)');
 portrait.addEventListener('change',()=>{if(portrait.matches&&page==='battle')pause();});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){bankCoins();audio.paused=true;if(page==='battle')pause();}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){checkpoint(true);audio.paused=true;if(page==='battle')pause();}});
 el('pause').onclick=pause;
 el('dash').onpointerdown=e=>{if(page==='battle'){e.preventDefault();scene.requestDash();}};
 el('dash').onclick=e=>{if(e.detail===0 && page==='battle')scene.requestDash();};
-window.addEventListener('pagehide',bankCoins);
+window.addEventListener('pagehide',()=>{if(run?.ended&&page==='battle')end();else checkpoint(true);});
 const scene=new ForestScene({audio,tick:updateHud,health:updateHealth,showFps:()=>store.data.settings.showFps,upgrade,end,pause,relic:chooseRelic,gift:chooseGift,wound:(x,y,low)=>battleHud.wound(x,y,low), lowQuality:()=>store.data.settings.quality==='low',showEnemyHealth:()=>store.data.settings.showEnemyHealth,showEnemyHealthNumbers:()=>store.data.settings.showEnemyHealthNumbers,
   ready:()=>{if(!assetError){ready=true;home();}},
   error:message=>{assetError=true;sheet('森林载入失败',`<p>${message}</p>`,'<button id="reload">重新加载</button>');el('reload').onclick=()=>location.reload();}

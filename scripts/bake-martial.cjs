@@ -46,15 +46,16 @@ function figure(ward,view,frame,layer,legPhase=0){const side=view===1,back=view=
  const torso=(back?'':carry)+rear+core+(back?carry:'')+front+head;
  if(layer==='legs')return legs;
  return (layer==='torso'?'':legs)+at(64+(hurt?-1:0),51+bob,rot((hurt?-7:quiet?0:stride)*.8,torso))}
-async function bakeHunter(){
- // Each view has 24 independent gait samples and six torso poses; origins match the old rig.
- const layers=[];for(let view=0;view<3;view++)for(let slot=0;slot<30;slot++){
-   const index=view*30+slot,body=slot>=24;
-   layers.push({input:svg(figure(false,view,body?[11,6,7,8,9,10][slot-24]:0,body?'torso':'legs',slot)),left:index%10*128,top:Math.floor(index/10)*128});
+async function bakeMotion(){
+ // Keep the hunter's original frame numbers; append the sword and shield bank.
+ const columns=12,layers=[];
+ for(const ward of [false,true])for(let view=0;view<3;view++)for(let slot=0;slot<30;slot++){
+   const index=(ward?90:0)+view*30+slot,body=slot>=24;
+   layers.push({input:svg(figure(ward,view,body?[11,6,7,8,9,10][slot-24]:0,body?'torso':'legs',slot)),left:index%columns*128,top:Math.floor(index/columns)*128});
  }
- await sharp({create:{width:1280,height:1152,channels:4,background:'#00000000'}}).composite(layers).png({palette:true,colours:192}).toFile(path.join(dest,'hunter-motion.png'));
+ await sharp({create:{width:columns*128,height:15*128,channels:4,background:'#00000000'}}).composite(layers).png({palette:true,colours:192}).toFile(path.join(dest,'hunter-motion.png'));
 }
-(async()=>{await bakeHunter();if(process.argv.includes('--hunter-only'))return;const layers=[];for(let role=0;role<2;role++)for(let view=0;view<3;view++)for(let f=0;f<12;f++)layers.push({input:svg(figure(!role,view,f)),left:f*128,top:(role*3+view)*128});
+(async()=>{await bakeMotion();if(process.argv.includes('--hunter-only')||process.argv.includes('--motion-only'))return;const layers=[];for(let role=0;role<2;role++)for(let view=0;view<3;view++)for(let f=0;f<12;f++)layers.push({input:svg(figure(!role,view,f)),left:f*128,top:(role*3+view)*128});
  await sharp({create:{width:1536,height:768,channels:4,background:'#00000000'}}).composite(layers).png({palette:true,colours:192}).toFile(path.join(dest,'martial-heroes.png'));
  await require('./bake-job-portraits.cjs')(ward=>sharp(svg(figure(ward,0,11),384)).png().toBuffer());
 })().catch(e=>{console.error(e);process.exitCode=1});

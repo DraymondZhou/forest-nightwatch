@@ -1,6 +1,6 @@
 # 森光守夜 · Forest Nightwatch
 
-**当前版本：v1.14.0 · 林间怪阵**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.14.0) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.14.0/Forest-Nightwatch-v1.14.0.html)
+**当前版本：v1.15.0 · 岔路与续玩**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.15.0) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.15.0/Forest-Nightwatch-v1.15.0.html)
 
 《森光守夜》是一款支持手机横屏和电脑浏览器的森林生存肉鸽。先选职业，再选流派：法师靠雷电、孢子或余火控制战场；剑卫用盾反或重斩近身作战；猎手用穿杨或散射调整交战距离。
 
@@ -13,6 +13,10 @@
 新生成的小怪和精英随局内分钟数逐渐增加生命，已受伤的敌人不会在整分钟时回血。标准难度下，史莱姆开局为 22 生命，第 3 分钟约 68，第 6 分钟约 243。第 3、5 分钟之后血量增长更快，普通怪的经验提高到 4、5 点。标准难度古树约 13,812 生命；第一阶段砸地和撒种交替，狂怒后每三招有一次复合攻击，砸地结束时有 1.15 秒收招空当。猎手的燃矢、星镞会显示箭杆、尾羽和各自的命中效果；法师保留法术弹体，剑卫的霜锋、回旋刃使用盾波和旋刀。
 
 击败三分钟小首领后，从当前职业的两件遗物中选一件。本局生效，发现记录永久收入手记。升级时每局可免费换一组，九级职业天赋不会被换掉。结算页记录真正造成致命伤害的攻击与对应躲法。
+
+第二座林灯对侧有守卫宝箱，取其一。开箱获得 8 金币和一次换牌。升级时可勾选连升，让接下来最多两次普通升级继续提升同一项。职业挑战解锁营地装备，打造花费 24 金币。
+
+战斗每五秒保存，拾取金币、选择奖励和切后台也会存档。同一浏览器入口可从主菜单继续。导出文件包含永久进度。结算后可沿用流派再开一局。
 
 ## 开发
 
@@ -52,7 +56,7 @@ npm run build
 
 运行 npm run build 后执行 node offline.mjs。用 Edge 或 Chrome 双击打开生成的 Forest-Nightwatch.html 即可离线游玩。这个版本内嵌脚本、样式与运行素材。浏览器存档受打开方式和浏览器配置影响，换入口前可以在设置中导出。
 
-安装 Node.js 的 Windows 电脑可双击「手机同网试玩.cmd」。保持窗口开启，在同一 Wi-Fi 的手机 Safari 输入窗口列出的 WLAN 完整链接。每次启动会生成新地址，关闭窗口即停止服务。访客网络、设备间隔离及防火墙可能阻止同网访问。
+安装 Node.js 的 Windows 电脑可双击「手机同网试玩.cmd」。保持窗口开启，在同一 Wi-Fi 的手机 Safari 输入窗口列出的 WLAN 完整链接。同一台电脑和局域网 IP 下，重启保留端口 4173 和专用链接，关闭窗口即停止服务。访客网络、设备间隔离及防火墙可能阻止同网访问。
 
 地图使用可重复拼接的草地图块；装饰按世界坐标布置，角色可以向任意方向持续移动。图块实现参考 Phaser 官方 TileSprite 指南：https://phaser.io/oss/docs/phaser/concepts/gameobjects/tile-sprite
 

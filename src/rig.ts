@@ -162,7 +162,7 @@ export class WitchRig {
     if (moving) this.walkFacing = facingFromVector(Math.cos(angle),Math.sin(angle),this.walkFacing);
     const look = this.castTime < .29 ? this.attackFacing : moving ? this.walkFacing : this.view;
     if (look !== this.view && this.hurtLeft<.16) this.setView(look);
-    if (moving || this.castTime > .29) this.turnFeet(moving ? this.walkFacing : look);
+    this.turnFeet(moving ? this.walkFacing : look);
 
     const step = Math.sin(this.phase)*this.speed;
     const sideStep = this.walkFacing==='left' ? -1 : 1;
@@ -190,9 +190,10 @@ export class WitchRig {
     this.freeArm.rotation = (this.freeArm.x>0 ? -.12 : .12) - step*.14;
 
     const t = this.castTime;
-    const stroke = t < .05 ? -.2*Math.sin(t/.05*Math.PI)
-      : t < .12 ? Math.sin((t-.05)/.07*Math.PI/2)
-      : Math.max(0,1-(t-.12)/.21)**2;
+    // The spell is already live on cast. Hold the pointing pose through its
+    // first flash, then bring the wrist back to rest with a small overshoot.
+    const stroke=t<.045?1:t<.21?Math.cos((t-.045)/.165*Math.PI*.5)**2
+      :t<.29?-.065*Math.sin((t-.21)/.08*Math.PI):0;
     // Keep a folded elbow and the grip close to the chest. The wrist leads a
     // short arc; the tip supplies most of the visible travel.
     const front = this.view==='front', rear = this.view==='back', far = this.view==='left';

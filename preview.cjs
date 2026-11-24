@@ -7,7 +7,13 @@ const crypto = require('node:crypto');
 
 const file = path.join(__dirname, 'Forest-Nightwatch.html');
 if (!fs.existsSync(file)) throw Error('Place Forest-Nightwatch.html next to preview.cjs');
-const key = crypto.randomBytes(16).toString('hex');
+const stateDir = path.join(os.homedir(), '.forest-nightwatch');
+fs.mkdirSync(stateDir,{recursive:true});
+const keyFile = path.join(stateDir,'preview-key');
+try {fs.writeFileSync(keyFile,crypto.randomBytes(16).toString('hex'),{flag:'wx',mode:0o600});}
+catch (error) {if(error.code!=='EEXIST')throw error;}
+const key=fs.readFileSync(keyFile,'utf8').trim();
+if(!/^[0-9a-f]{32}$/.test(key))throw Error('Invalid local preview key');
 const trusted = Object.values(os.networkInterfaces()).flat().filter(ip =>
   ip && ip.family === 'IPv4' && !ip.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip.address));
 const bits = ip => ip.split('.').reduce((n,p) => (n<<8) | Number(p), 0);
@@ -22,6 +28,6 @@ for (const ip of trusted) {
     if(req.method==='HEAD')res.end();else fs.createReadStream(file).on('error',()=>res.destroy()).pipe(res);
   });
   server.on('error',err=>console.error(ip.address,err.message));
-  server.listen(0,ip.address,()=>console.log('Safari: http://'+ip.address+':'+server.address().port+'/play/'+key));
+  server.listen(4173,ip.address,()=>console.log('Safari: http://'+ip.address+':'+server.address().port+'/play/'+key));
 }
 if(!trusted.length)console.log('Connect this computer and your phone to the same Wi-Fi first.');

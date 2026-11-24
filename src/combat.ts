@@ -13,7 +13,7 @@ export type EnemyKind='slime'|'moth'|'twig'|'spitter'|'beetle'|'brute'|'crystal'
 export interface Enemy {id:number;kind:EnemyKind;x:number;y:number;hp:number;maxHp:number;radius:number;speed:number;attack:number;phase:number;clock:number;slow:number;frozen:number;rooted:number;burn:number;burnClock:number;spore:number;proc:number;flash:number;hitAngle:number;gait:number;attackPose:number; charge?:{angle:number;remaining:number}; preparing?:number; windupTime?:number; attackHeading?:number; pattern?:number; recovery?:number}
 export const isChief=(kind:EnemyKind)=>kind==='boss'||kind==='boar'||kind==='mothQueen';
 export const chiefName=(kind:EnemyKind)=>kind==='boar'?'棘冠山主':kind==='mothQueen'?'月绒蛾后':'古树守卫';
-export interface Shot {id:number;x:number;y:number;vx:number;vy:number;life:number;radius:number;damage:number;weapon:WeaponId|'enemy';pierce:number;lance?:boolean; missile?:'sap'|'shard'|'seed'|'dust'; aimed?:boolean;hit:Set<number>}
+export interface Shot {id:number;x:number;y:number;vx:number;vy:number;life:number;radius:number;damage:number;weapon:WeaponId|'enemy';pierce:number;lance?:boolean; missile?:'sap'|'shard'|'seed'|'dust'; trialShot?:boolean; aimed?:boolean;hit:Set<number>}
 export interface Zone {id:number;x:number;y:number;radius:number;life:number;tick:number;damage:number;kind:'spore'|'ember'|'warning';timer:number;bloomed?:boolean; shape?:'disk'|'ring'|'lane'|'cleave'; angle?:number; owner?:number; duration?:number}
 export interface Drop {id:number;x:number;y:number;value:number;born:number;kind:'xp'|'heal'|'coin'}
 export interface Effect {kind:'impactZone'|'slash'|'bloom'|'wound'|'dash'|'evade'|'defeat'|'gather'|'strike'|'cast'|'hit'|'chain'|'burst'|'frost'|'heal'|'level'|'synergy';x:number;y:number;enemyKind?:EnemyKind;weapon?:WeaponId;tx?:number;ty?:number;radius?:number;color?:number;text?:string;shape?:Zone['shape'];arcSeed?:number;hop?:number;empowered?:boolean}
@@ -36,6 +36,9 @@ export class Combat {
   seconds=0;level=1;xp=0;kills=0;pendingLevels=0;ended=false;won=false;bossSpawned=false;synergySeen=false;
   damageByWeapon:Partial<Record<WeaponId,number>>={};
   dashCooldown=0; dashTime=0; dashAngle=0; dodges=0; shrinesLit=0;
+  cacheSite?:Shrine; private cacheGuarded=false;
+  queued?:{id:UpgradeId;left:number};
+  trialDone=false; kit=false;
   shrine?:Shrine; giftPending=false; flameTime=0;
   miniSpawned=false; counterReady=false; swings=0; weaponAngle=0; weaponMotion=0;
   waveHint=''; private waveHintUntil=0;
@@ -75,6 +78,7 @@ export class Combat {
     this.gridHeads.fill(-1);
     this.player.hp=this.player.maxHp=maxHealth(training);this.build[this.path.weapon]=1;
   }
+  lastHit?:{kind:AttackNote;time:number};previousHit?:{kind:AttackNote;time:number};
   fatal?:{kind:AttackNote;damage:number};
   get rules(){return DIFFICULTIES[this.difficulty];}
   get pickupRadius(){return (98+(this.build.reach??0)*12)*1.2+(this.harvestTime>0?145:0);}
@@ -133,6 +137,7 @@ export class Combat {
   private effect(effect:Effect){if(this.effects.length<100)this.effects.push(effect);}
   private hurt(amount:number,sourceX:number,sourceY:number,kind:AttackNote='contact') {
     if(this.evadeWindow>0 && this.player.invincible<=0 && !this.ended){
+      if(this.pathId==='guard' && this.masteryActive && kind==='cleave')this.counterReady=true;
       if(this.harvestTime<=0){
         this.dodges++;this.harvestTime=.75;
         this.effect({kind:'evade',x:this.player.x,y:this.player.y,color:0xc2ecc1,radius:40});
@@ -141,6 +146,7 @@ export class Combat {
     }
     if(this.player.invincible>0||this.ended)return;
     if(this.pathId==='guard'){amount=Math.max(1,Math.round(amount*.80));if(this.masteryActive)this.counterReady=true;}
+    this.previousHit=this.lastHit;this.lastHit={kind,time:this.seconds};
     this.player.hp=Math.max(0,this.player.hp-amount);this.player.invincible=0.8+(this.build.stride??0)*0.06;
     // Damage feedback always reaches the renderer, even during a full spell burst.
     if(this.effects.length>=100)this.effects.pop();
@@ -214,10 +220,12 @@ export class Combat {
         });
         for(const e of targets){
           if(this.relic==='briar'&&targets.length>=3)e.slow=Math.max(e.slow,isChief(e.kind)?.30:1);
+          if(heavy && isChief(e.kind))this.trialDone=true;
           const bonus=heavy&&this.classTalent&&(isChief(e.kind)||e.kind==='brute'||e.kind==='crystal')?1.4:1;
           this.hit(e,36*scale*(counter?2:heavy?1.7:1)*bonus*(this.relic==='whetstone'&&targets.length===1?1.25:1),'blade',false,angle);
         }
-        if(counter&&this.classTalent)p.hp=Math.min(p.maxHp,p.hp+6);
+        if(this.kit && (heavy||counter) && targets.length)this.dashCooldown=Math.max(0,this.dashCooldown-1);
+        if(counter&&this.classTalent&&targets.length)p.hp=Math.min(p.maxHp,p.hp+6);
         this.counterReady=false;this.effect({kind:'slash',x:p.x,y:p.y,tx:angle,radius});
       }else{
         const volley=this.pathId==='volley',arrows=volley?(this.masteryActive?5:3):1;
@@ -225,11 +233,11 @@ export class Combat {
         const aimed=!volley&&this.masteryActive&&distance2(p,target)>200**2;
         for(let i=0;i<arrows;i++){
           const arrow=this.fire('bow',target,36*scale*(volley?.64:aimed?1.55:1),460,volley?1+Math.floor(level/3):3+Math.floor(level/2),(i-(arrows-1)/2)*.14);
-          if(arrow){arrow.aimed=aimed;if(feather){arrow.damage*=1.15;arrow.pierce++;}}
+          if(arrow){if(aimed && isChief(target.kind))arrow.trialShot=true;arrow.aimed=aimed;if(feather){arrow.damage*=1.15;arrow.pierce++;}}
         }
       }
     }else if(weapon==='spark'){
-      if(charged)this.stormCharge=0;
+      if(charged){this.stormCharge=0;if(isChief(target.kind))this.trialDone=true;}
       const eliteStrike=charged && this.classTalent && (isChief(target.kind)||target.kind==='brute'||target.kind==='crystal');
       const primary=18*(charged?1.65:1)*(eliteStrike?1.25:1);
       let current=target;let previous:{x:number;y:number}=this.player;const visited=new Set<number>();
@@ -282,7 +290,7 @@ export class Combat {
       this.dashAngle=length>.05?Math.atan2(control.y,control.x):p.angle;
       if(this.relic==='quicknock')this.weaponClocks.bow=0;
       if(this.relic==='waywick')this.zones.push({id:this.nextId(),kind:'ember',x:p.x,y:p.y,radius:62,life:2,tick:0,timer:0,damage:7*this.power});
-      this.dashTime=DASH_TIME;this.evadeWindow=.16;this.dashCooldown=4.2;
+      this.dashTime=DASH_TIME;this.evadeWindow=.16;if(this.kit && this.path.job==='mage')this.weaponClocks[this.path.weapon]=Math.max(0,(this.weaponClocks[this.path.weapon]??0)-.35);this.dashCooldown=this.kit && this.path.job==='hunter'?3.8:4.2;
       if(this.pathId==='ash' && this.masteryActive && this.shots.length<280){
         const speed=540;
         this.shots.push({id:this.nextId(),x:p.x,y:p.y,vx:Math.cos(this.dashAngle)*speed,vy:Math.sin(this.dashAngle)*speed,
@@ -336,7 +344,27 @@ export class Combat {
       const angle=(this.seed%360)*Math.PI/180+this.nextShrine*2.4;
       this.shrine={x:this.player.x+Math.cos(angle)*310,y:this.player.y+Math.sin(angle)*310,
         charge:0,expires:this.seconds+40};
+      if(this.nextShrine===1){
+        this.cacheSite={x:2*this.player.x-this.shrine.x,y:2*this.player.y-this.shrine.y,charge:0,expires:this.shrine.expires};
+      }
       this.nextShrine++;
+    }
+    const cache=this.cacheSite;
+    if(cache){
+      if(this.seconds>=cache.expires)this.cacheSite=undefined;
+      else {
+        const distance=distance2(cache,this.player);
+        if(!this.cacheGuarded && distance<230**2){
+          this.cacheGuarded=true;
+          this.spawn('spitter',cache.x-85,cache.y+45);
+          this.spawn('spitter',cache.x+85,cache.y-45);
+        }
+        if(distance<=52**2)cache.charge+=dt;
+        if(cache.charge>=RITUAL_TIME){
+          this.coins+=8;this.rerolls++;this.cacheSite=this.shrine=undefined;
+          this.waveHint='宝箱 · 8 金币，换牌 +1';this.waveHintUntil=this.seconds+3;
+        }
+      }
     }
     const lamp=this.shrine;
     if(!lamp)return;
@@ -344,7 +372,7 @@ export class Combat {
     // Stepping out to dodge preserves the part already kindled.
     if(distance2(lamp,this.player)<=52**2)lamp.charge+=dt;
     if(lamp.charge>=RITUAL_TIME){
-      this.shrinesLit++;this.shrine=undefined;this.giftPending=true;
+      this.shrinesLit++;this.cacheSite=this.shrine=undefined;this.giftPending=true;
     }
   }
   takeGift(gift:ShrineGift){
@@ -478,6 +506,7 @@ export class Combat {
         if(e.hp<=0||shot.hit.has(e.id))continue;
         const aimed=shot.aimed&&this.classTalent&&(isChief(e.kind)||e.kind==='brute'||e.kind==='crystal');
         if(shot.weapon==='bow'&&this.pathId==='volley'&&this.classTalent&&!isChief(e.kind))e.slow=Math.max(.55,e.slow);
+        if(shot.trialShot && isChief(e.kind))this.trialDone=true;
         shot.hit.add(e.id);this.hit(e,shot.damage*(aimed?1.4:1),shot.weapon,false,Math.atan2(shot.vy,shot.vx));shot.pierce--;
         if(shot.weapon==='ember'){
           if(e.burn<=0)e.burnClock=.5;
@@ -535,6 +564,22 @@ export class Combat {
     });
     if(gathered)this.effect({kind:'gather',x:p.x,y:p.y+6,color:0xf4cf78,radius:15});
     while(this.xp>=xpNeeded(this.level)){this.xp-=xpNeeded(this.level);this.level++;this.pendingLevels++;p.hp=Math.min(p.maxHp,p.hp+2+(this.build.fortune??0)*2);}
+    this.settleQueued();
+  }
+  queueUpgrade(id:UpgradeId){
+    const skill=ABILITIES.find(a=>a.id===id);
+    if(skill && this.build[id] && this.build[id]!<skill.max)this.queued={id,left:2};
+  }
+  settleQueued(){
+    while(this.queued && this.pendingLevels){
+      const {id,left}=this.queued;
+      const current=this.level-this.pendingLevels+1;
+      if(current===MASTERY_LEVEL || this.offersClassTalent)break;
+      if((this.build[id]??0)>=ABILITIES.find(a=>a.id===id)!.max){this.queued=undefined;break;}
+      this.resolveLevel(id);
+      if(left<=1 || this.build[id]===ABILITIES.find(a=>a.id===id)!.max)this.queued=undefined;
+      else this.queued.left--;
+    }
   }
   resolveLevel(id?:UpgradeId|'mastery'){if(this.pendingLevels<=0)return;
     if(id==='mastery'){if(!this.offersClassTalent)return;this.classTalent=true;}

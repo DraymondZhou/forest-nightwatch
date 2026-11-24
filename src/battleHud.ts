@@ -37,16 +37,25 @@ export class BattleHud {
     const ready=s.dashCooldown<=0;
     this.dash.setAttribute('aria-disabled',String(!ready));
     this.cooldown.textContent=ready?'就绪':s.dashCooldown.toFixed(1)+'s';
-    this.dash.style.setProperty('--charge',(360*(1-s.dashCooldown/4.2)).toFixed(0)+'deg');
+    this.dash.style.setProperty('--charge',(360*(1-s.dashCooldown/(s.kit&&s.path.job==='hunter'?3.8:4.2))).toFixed(0)+'deg');
     const shrine=s.shrine;
-    if(shrine){
+    if(s.bossSpawned){
+      const left=Math.max(0,480-Math.floor(s.seconds));
+      this.task.textContent='天亮前击败古树 · '+Math.floor(left/60)+':'+String(left%60).padStart(2,'0');
+    }else if(shrine){
       const x=shrine.x-s.player.x,y=shrine.y-s.player.y,distance=Math.hypot(x,y);
       const arrow=['→','↘','↓','↙','←','↖','↑','↗'][(Math.round(Math.atan2(y,x)/(Math.PI/4))+8)%8];
       this.task.textContent=distance<=52
         ? '正在点灯　'+Math.min(100,Math.floor(100*shrine.charge/RITUAL_TIME))+'%'
         : arrow+' 林灯　'+Math.round(distance/10)+' 步　·　'+Math.ceil(shrine.expires-s.seconds)+'s';
+      if(s.cacheSite){
+        const cache=s.cacheSite,dx=cache.x-s.player.x,dy=cache.y-s.player.y;
+        const dir=['→','↘','↓','↙','←','↖','↑','↗'][(Math.round(Math.atan2(dy,dx)/(Math.PI/4))+8)%8];
+        this.task.textContent+='　|　'+(Math.hypot(dx,dy)<=52?'开箱 '+Math.floor(cache.charge/RITUAL_TIME*100)+'%':dir+' 守卫宝箱');
+      }
     }else if(s.flameTime>0)this.task.textContent='借火　'+Math.ceil(s.flameTime)+'s';
-    else if(s.seconds<6)this.task.textContent='拾取金色种荚升级　·　三分钟迎战小首领';
+    else if(s.seconds<7)this.task.textContent=s.path.job==='warden'?'靠近挥刀，横移躲开敌人的挥砍':s.path.job==='hunter'?'拉开距离，箭能穿过敌群':'移动引敌，法术自动攻击';
+    else if(s.seconds<11)this.task.textContent='拾取种荚升级 · 遇险时闪避';
     else this.task.textContent='';
   }
 }

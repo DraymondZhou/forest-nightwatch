@@ -30,7 +30,9 @@ export class AudioDirector {
     if(now-this.lastHit<(heavy?70:110))return;
     this.lastHit=now;
     this.tone(heavy?180:390,heavy?.105:.048,this.sound*(heavy?.16:.09),'triangle',heavy?58:130);
-    if(weapon==='spark')this.tone(940,.035,this.sound*.048,'square',310);
+    if(weapon==='blade')this.tone(heavy?1180:1490,.052,this.sound*.075,'triangle',335);
+    else if(weapon==='bow')this.tone(193,.055,this.sound*.10,'sine',64);
+    else if(weapon==='spark')this.tone(940,.035,this.sound*.048,'square',310);
     else if(weapon==='frost'||weapon==='comet')this.tone(1220,.105,this.sound*.085,'sine',780);
     else if(weapon==='ember')this.tone(104,.13,this.sound*.15,'triangle',46);
     else if(heavy)this.tone(800,.032,this.sound*.045,'square',240);
