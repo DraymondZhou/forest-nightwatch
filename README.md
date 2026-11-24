@@ -1,8 +1,10 @@
 # 森光守夜 · Forest Nightwatch
 
-**当前版本：v1.17.1 · 战斗出手校准**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.17.1) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.17.1/Forest-Nightwatch-v1.17.1.html)
+**当前版本：v1.17.2 · 侧身与后撤**　｜　[版本说明](https://github.com/DraymondZhou/forest-nightwatch/releases/tag/v1.17.2) · [下载离线游戏（HTML）](https://github.com/DraymondZhou/forest-nightwatch/releases/download/v1.17.2/Forest-Nightwatch-v1.17.2.html)
 
 《森光守夜》是一款支持手机横屏和电脑浏览器的森林生存肉鸽。先选职业，再选流派：法师靠雷电、孢子或余火控制战场；剑卫用盾反或重斩近身作战；猎手用穿杨或散射调整交战距离。
+
+剑卫左手持盾、右手持剑，猎手的箭袋挂在右肩。向反方向后撤时仍朝向射程内的交战目标。
 
 猎手的箭从当前动作的弓弦飞出，侧射保持在松弦高度。法师的弹体从杖尖发出，晶片怪发射前能看到三条弹路。
 

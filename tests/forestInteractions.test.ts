@@ -14,6 +14,21 @@ describe('forest combat interactions',()=>{
     s.step(1/60,idle);expect(s.effects.some(e=>e.kind==='cast')).toBe(true);
     s.step(1/60,idle);expect(s.effects.some(e=>e.kind==='cast')).toBe(false);
   });
+  it.each(['guard','sniper'] as const)('%s tracks an engaged target while retreating and releases it outside weapon range',path=>{
+    const game=arena(path),p=game.player;
+    const enemy=game.spawn('slime',p.x+54,p.y)!;
+    enemy.speed=0;enemy.hp=enemy.maxHp=1000;
+    for(let tick=0;tick<18;tick++)game.step(1/60,{x:-.3,y:0});
+    expect(game.combatFacingTarget).toBe(enemy);
+    enemy.x=p.x+600;
+    expect(game.combatFacingTarget).toBeUndefined();
+    const next=game.spawn('slime',p.x-55,p.y)!;
+    next.speed=0;next.hp=next.maxHp=1000;
+    for(let tick=0;tick<60;tick++)game.step(1/60,idle);
+    expect(game.combatFacingTarget).toBe(next);
+    next.hp=0;
+    expect(game.combatFacingTarget).toBeUndefined();
+  });
   it('only the ancient tree stomp cracks living beetles inside the impact',()=>{
     const s=arena('hazel');s.build={};const p=s.player;
     const owner=s.spawn('boss',p.x+240,p.y)!;

@@ -166,6 +166,10 @@ export class ForestScene extends Phaser.Scene {
     }
     const readyPose=this.sim.path.job==='mage'?this.sim.focus>=1:this.sim.heavyReady;
     const target=this.sim.windupTarget;
+    if(this.rig instanceof MartialRig){
+      const facing=this.sim.combatFacingTarget;
+      if(facing)this.rig.track(facing.x-this.sim.player.x,facing.y-this.sim.player.y);
+    }
     if(target)this.rig.prepare(target.x-this.sim.player.x,target.y-this.sim.player.y,this.sim.windupTime);
     this.rig.update(dt,this.sim.player.moving,this.sim.player.angle,this.sim.player.invincible>0,this.sim.seconds,this.sim.dashTime,readyPose);
     // Render between the two fixed simulation samples on high-refresh displays.

@@ -1,6 +1,4 @@
-/* Original cut-paper figures. Legs and arms are two-link chains; weapons share
-   the wrist transform. Each of three views has six strides, four attacks, hurt
-   and rest. Bake once with sharp available; the game uses one sprite per hero. */
+/* Cut-paper heroes with two-link limbs. Bake each equipped upper-body view and its weapon attachments together. */
 const fs=require('node:fs'),path=require('node:path'),sharp=require('sharp');
 const dest=path.join(__dirname,'../public/art'),ink='#252b28';
 const p=(d,c,w=1.4)=>'<path d="'+d+'" fill="'+c+'" stroke="'+(w?ink:'none')+'" stroke-width="'+w+'" stroke-linejoin="round"/>';
@@ -26,68 +24,81 @@ function hoodHead(side,back,hurt){return p('M-14 10 Q-8 4 -11 -3L-16 -12 -5 -15Q
 const sword=rot(0,p('M-2 0L-2.8 -24 0 -35 3 -24 2 0Z',light)+p('M0 -33L2.5 -23 1.8 -1 -.5 -1Z',steel,0)+p('M-6 0L-4 -2 5 -2 7 0 2 1 1 7 -1 7 -2 1Z',edge)+mark(0,6,1.5,edge));
 const shield=p('M-11 -11 Q-4 -14 0 -16Q5 -13 11 -12L10 1Q8 9 0 15Q-7 10 -10 3Z',edge)+p('M-8.5 -9.7L0 -13 8.5 -10 7.5 1Q6 7 0 11.5Q-7 6 -8 0Z','#425e59')+l('M0 8L0 -8M0 1L-4 -4M0 -2L4 -6',edge,1.6)+mark(-8,-9,1.1,light)+mark(8,-9,1.1,light);
 function body(ward,side,back){if(ward)return p('M-12 -2L9 -2 13 7 10 16 14 30 4 27 -2 31 -12 28 -16 30 -10 14Z',cloth)+p('M-12 0 Q0 -6 12 0L13 7 9 18 2 20 -9 16 -12 9Z',steel)+p('M-10 5Q0 11 11 3L8 14 2 17 -8 14Z',iron,0)+l('M-10 3Q-2 8 9 2M-7 11L-2 13M-6 23L-8 26',light,1.3)+p('M-10 16Q0 19 10 15L11 19 0 22 -11 20Z',hide)+l('M-10 22l2 1M-11 24l2 1M8 23l2 1M9 25l2 1','#af7357',.8)+at(side?3:0,18,p('M-2 -1.5L2 -1.5 2 1.5 -2 1.5Z',edge,.7))+(!back?p('M-14 -1Q-9 -7 -3 -2L-4 4 -14 7 -17 4Z',steel)+l('M-14 1l7 -1',light):p('M-9 -4L8 -3 12 18 8 26 2 24 -7 27 -13 22Z',cloth)+l('M-8 0l-2 18M5 1l4 18','#ab6450'));
- return p('M-8 -1L8 -3 9 8 7 16 11 27 4 26 1 29 -8 25 -12 28 -7 11Z','#716445')+p('M-11 -2Q-1 -7 9 -2L12 7 7 8 9 12 2 11 -3 16 -7 12 -13 14 -11 9 -15 10Z',moss)+l('M-9 0l-3 7M-6 3l-2 5M3 3l4 3M1 7l2 1M0 8l2 2M-3 7l-2 4M8 5l1 2','#9ea782',1.25)+p('M-9 16L8 12 9 15 -8 20Z',hide)+p('M4 15L9 14 11 19 9 22 3 21Z','#9a7951')+(back?'':l('M-6 16L6 -1','#ae8c60',2.3))}
+ return p('M-8 -1L8 -3 9 8 7 16 11 27 4 26 1 29 -8 25 -12 28 -7 11Z','#716445')+p('M-11 -2Q-1 -7 9 -2L12 7 7 8 9 12 2 11 -3 16 -7 12 -13 14 -11 9 -15 10Z',moss)+l('M-9 0l-3 7M-6 3l-2 5M3 3l4 3M1 7l2 1M0 8l2 2M-3 7l-2 4M8 5l1 2','#9ea782',1.25)+p('M-9 16L8 12 9 15 -8 20Z',hide)+p('M4 15L9 14 11 19 9 22 3 21Z','#9a7951')}
 const quiver=rot(21,p('M-3 -23L-3.5 -29 -1 -27 0 -31 1 -26 0 -22ZM1 -21L1 -27 3 -25 5 -28 4 -23 3 -21Z','#b3bc93',.7)+l('M-1 -26L-1 -15M3 -25L2 -15','#ad8054',1.2)+p('M-4 -18L4 -18 3.5 5 0 9 -3 7Z',hide)+l('M-3 -15L3 -15M-2.5 3L3 3',edge,1.5));
-function figure(ward,view,frame,layer,legPhase=0,socket){const side=view===1,back=view===2,atk=frame>=6&&frame<10,hurt=frame===10,quiet=frame===11;
+function figure(ward,view,frame,layer,legPhase=0,socket){const left=view===3,side=view===1||left,back=view===2,atk=frame>=6&&frame<10,hurt=frame===10,quiet=frame===11;
  const stride=layer==='legs'?Math.sin(legPhase*Math.PI/12):frame<6?Math.sin(frame*Math.PI/3):0,t=atk?frame-6:0,bob=frame<6?-Math.abs(stride)*1.5:hurt?2:0,hip=ward?6:4.8;
  const legs=leg(64-(side?2:hip),-stride,side,true,ward)+leg(64+(side?2:hip),stride,side,false,ward);
- const shoulders=[side?-3:-9,side?5:9],core=at(0,0,body(ward,side,back)),head=at(side?1:0,-7,ward?helmet(side,back,hurt):hoodHead(side,back,hurt));
+ const shoulders=side?(left?[3,-4]:[-3,5]):[-9,9],core=at(0,0,body(ward,side,back)),head=at(side?1:0,-7,ward?helmet(side,back,hurt):hoodHead(side,back,hurt));
  let rear='',front='';
  const heavy=ward&&frame>=12&&frame<=14;
  if(ward){const a=[shoulders[0],2],b=[shoulders[1],2];
  const h=heavy?(side?[[-5,13],[17,5],[12,16]]:[[-13,13],[-1,3],[5,12]])[frame-12]
    :atk?(side?[[5,8],[9,-3],[15,2],[12,10]]:[[-8,8],[-14,-1],[-2,2],[3,12]])[t]:[side?6:-13,13+stride];
- const sh=[side?9:13,heavy?7:hurt?5:12-stride*.7];
+ const sh=[side?(left?6:12):13,heavy?7:hurt?5:12-stride*.7];
  const bladeAngle=heavy?(side?[-128,85,127]:[-118,72,116])[frame-12]:atk?(side?[-28,-57,64,112]:[-40,-69,36,90])[t]:(side?24:-16);
  const contact=heavy?frame===13:atk&&t===2;
  const axial=!side && contact;
  const angle=axial?(back?18:153):bladeAngle*(back?-1:1),projection=axial?.62:1;
  const blade=at(...h,g('scale(1 '+projection+')',rot(angle,sword)));
  if(socket){socket.x=h[0];socket.y=h[1];socket.tip=[h[0]+35*Math.sin(angle*Math.PI/180),h[1]-35*Math.cos(angle*Math.PI/180)*projection];}
- const attack=arm(a,h,true,false,-1)+blade+hand(h);const guard=arm(b,sh,true,true,-1)+at(...sh,g('scale('+(side?.8:1)+' 1)',shield));rear=back?attack:guard;front=back?guard:attack;
- }else{const aim=atk?(side?-5:back?-72:65):22;const bh=side?(atk?[21,1]:[12,12]):(atk?[10,back?-3:8]:[11,14]);const d=atk?[3,14,-2,0][t]:0;const rad=aim*Math.PI/180,nock=[bh[0]-(7+d)*Math.cos(rad),bh[1]-(7+d)*Math.sin(rad)];const pull=atk&&t<2?nock:side?(atk?[4,2]:[1,12]):(atk?[-2,5]:[-5,14]);
+ const swordFar=back||left;
+ const attack=arm(a,h,true,swordFar,-1)+blade+hand(h);
+ const shieldWidth=side?(left?.98:.54):1;
+ const shieldBack=p('M-9 -10L0 -14 9 -11 8 2Q6 8 0 13Q-8 7 -9 1Z','#68533c')+l('M-5 -5l10 3M-5 2l9 3','#c29b65',2);
+ const guard=arm(b,sh,true,!swordFar,-1)+at(...sh,g('scale('+shieldWidth+' 1)',side&&!left?shieldBack:shield));
+ rear=swordFar?attack:guard;front=swordFar?guard:attack;
+ }else{const aim=atk?(side?-5:back?-72:65):22;const bh=side?(atk?[left?19:21,left?2:1]:[left?10:12,12]):(atk?[10,back?-3:8]:[11,14]);const d=atk?[3,14,-2,0][t]:0;const rad=aim*Math.PI/180,nock=[bh[0]-(7+d)*Math.cos(rad),bh[1]-(7+d)*Math.sin(rad)];const pull=atk&&t<2?nock:side?(atk?[4,2]:[1,12]):(atk?[-2,5]:[-5,14]);
  if(socket){socket.x=nock[0];socket.y=nock[1];}
  const bow=at(...bh,rot(aim,p('M-5 -22Q5 -12 1 0Q5 12 -5 22Q1 12 -1 1Q1 -12 -5 -22Z','#c69458',1.0)+l('M-5 -22L'+(-7-d)+' 0 -5 22','#e6d5a0',.9)));
- const hold=arm([shoulders[1],2],bh,false,false,-1)+bow+hand(bh);
- const draw=arm([shoulders[0],2],pull,false,true,1)+hand(pull);
- rear=back?hold:draw; front=back?draw:hold;
+ const hold=arm([shoulders[1],2],bh,false,side&&!left,-1)+bow+hand(bh);
+ const draw=arm([shoulders[0],2],pull,false,left||back,1)+hand(pull);
+ const drawNear=side?!left:back;rear=drawNear?hold:draw;front=drawNear?draw:hold;
  if(atk&&t<2)front+=at(...nock,rot(aim,l('M-2 0L27 0','#e2c79b',1.2)+p('M28 0l-5 -2 1 4Z',light,.65)+p('M1 0l-5 -3 -1 2 3 1Z','#b4b998',.55)));}
- const carry=!ward?at(side?-9:back?-6:-12,10,rot(-42,quiver)):'';
+ if(back){rear=g('scale(-1 1)',rear);front=g('scale(-1 1)',front);}
+ // The quiver mouth sits over the right shoulder. Turning left hides the tube behind the cloak.
+ const carry=ward?'':at(side?(left?-12.5:-11):back?9:-11,left?8:9,g('scale('+(back?-1:left?.72:1)+' 1)',rot(-42,quiver)));
+ const carryNear=back||(side&&!left);
+ const strap=ward?'':l(side?(left?'M-4 0Q0 8 6 15':'M-9 0Q-5 8 5 15'):back?'M8 -2L-7 17':'M-8 -2L7 16','#544637',3.2)
+   +l(side?(left?'M-4 0L6 15':'M-9 0L5 15'):back?'M8 -2L-7 17':'M-8 -2L7 16','#ba9667',1.5);
  const collar=ward?'':at(2,0,p('M-9 -2Q-2 2 6 -3L9 0 3 5 -2 4 -7 8 -6 3Z','#445b51',.9)+l('M-6 3l5 -1 6 -3','#c5bc83',1.2)+mark(2,1,1.65,edge));
- const torso=(back?'':carry)+rear+core+collar+(back?carry:'')+front+head;
+ const torso=(carryNear?'':carry)+rear+core+strap+collar+(carryNear?carry:'')+front+head;
  if(layer==='legs')return legs;
  const drawLean=!ward&&atk?(side?[0,-5,3,1]:[0,-3,2,0])[t]:0;
  const lean=heavy?[-6,8,5][frame-12]*(back?-1:1):(hurt?-7:quiet?0:stride)*.8+drawLean;
  if(socket){
-   const a=lean*Math.PI/180,x=socket.x,y=socket.y;
+   const a=lean*Math.PI/180,x=back?-socket.x:socket.x,y=socket.y;
    socket.x=64+(hurt?-1:0)+x*Math.cos(a)-y*Math.sin(a);
    const top=51+bob+(heavy?2:0);
    socket.y=top+x*Math.sin(a)+y*Math.cos(a);
    if(socket.tip){
-     const [tx,ty]=socket.tip;
+     const tx=back?-socket.tip[0]:socket.tip[0],ty=socket.tip[1];
      socket.tip=[64+(hurt?-1:0)+tx*Math.cos(a)-ty*Math.sin(a),top+tx*Math.sin(a)+ty*Math.cos(a)];
    }
  }
- return (layer==='torso'?'':legs)+at(64+(hurt?-1:0),51+bob+(heavy?2:0),rot(lean,torso))}
+ if(left&&socket){socket.x=128-socket.x;if(socket.tip)socket.tip[0]=128-socket.tip[0];}
+ const drawing=(layer==='torso'?'':legs)+at(64+(hurt?-1:0),51+bob+(heavy?2:0),rot(lean,torso));
+ return left?g('translate(128 0) scale(-1 1)',drawing):drawing;}
 async function bakeMotion(){
- // Keep the hunter's original frame numbers; append the sword and shield bank.
- const columns=12,layers=[],sockets=[],blades=[];
- for(const ward of [false,true])for(let view=0;view<3;view++)for(let slot=0;slot<30;slot++){
-   const index=(ward?90:0)+view*30+slot,body=slot>=24;
-   const socket=body?{}:undefined;
-   const drawing=figure(ward,view,body?[11,6,7,8,9,10][slot-24]:0,body?'torso':'legs',slot,socket);
-   if(socket)(ward?blades:sockets).push([socket.x,socket.y,...(socket.tip??[])].map(value=>Number(value.toFixed(4))));
-   layers.push({input:svg(drawing),left:index%columns*128,top:Math.floor(index/columns)*128});
+ // Per profession: three banks of 24 leg frames and four banks of six equipped torso poses.
+ const columns=16,layers=[],sockets=[],blades=[];
+ const add=drawing=>{
+   const i=layers.length;
+   layers.push({input:svg(drawing),left:i%columns*128,top:Math.floor(i/columns)*128});
+ };
+ const addTorso=(ward,view,pose)=>{
+   const socket={};
+   add(figure(ward,view,pose,'torso',0,socket));
+   (ward?blades:sockets).push([socket.x,socket.y,...(socket.tip??[])].map(value=>Number(value.toFixed(4))));
+ };
+ for(const ward of [false,true]){
+   for(let view=0;view<3;view++)for(let step=0;step<24;step++)add(figure(ward,view,0,'legs',step));
+   for(let view=0;view<4;view++)for(const pose of [11,6,7,8,9,10])addTorso(ward,view,pose);
  }
+ for(let view=0;view<4;view++)for(const pose of [12,13,14])addTorso(true,view,pose);
  fs.writeFileSync(path.join(__dirname,'../src/bow-sockets.json'),JSON.stringify(sockets)+'\n');
- for(let view=0;view<3;view++)for(let i=0;i<3;i++){
-   const index=180+view*3+i;
-   const socket={},drawing=figure(true,view,12+i,'torso',0,socket);
-   blades.push([socket.x,socket.y,...socket.tip].map(value=>Number(value.toFixed(4))));
-   layers.push({input:svg(drawing),left:index%columns*128,top:Math.floor(index/columns)*128});
- }
  fs.writeFileSync(path.join(__dirname,'../src/blade-sockets.json'),JSON.stringify(blades)+'\n');
- await sharp({create:{width:columns*128,height:16*128,channels:4,background:'#00000000'}}).composite(layers).png({palette:true,colours:192}).toFile(path.join(dest,'hunter-motion.png'));
+ await sharp({create:{width:columns*128,height:Math.ceil(layers.length/columns)*128,channels:4,background:'#00000000'}}).composite(layers).png({palette:true,colours:192}).toFile(path.join(dest,'hunter-motion.png'));
 }
 (async()=>{await bakeMotion();if(process.argv.includes('--hunter-only')||process.argv.includes('--motion-only'))return;const layers=[];for(let role=0;role<2;role++)for(let view=0;view<3;view++)for(let f=0;f<12;f++)layers.push({input:svg(figure(!role,view,f)),left:f*128,top:(role*3+view)*128});
  await sharp({create:{width:1536,height:768,channels:4,background:'#00000000'}}).composite(layers).png({palette:true,colours:192}).toFile(path.join(dest,'martial-heroes.png'));

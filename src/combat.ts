@@ -209,8 +209,17 @@ export class Combat {
     if(left<=0 || left>.16 || !this.build[weapon])return;
     return this.aimTarget(weapon,this.build[weapon]!,weapon==='spark' && this.masteryActive && this.stormCharge>=1,this.relic==='stillglass' && this.focus>=1);
   }
+  private lastMartialTarget?:Enemy;
+  private weaponRange(weapon:WeaponId,level:number,charged:boolean){
+    return weapon==='blade'?(110+level*7)*this.reach*(this.heavyReady?1.3:1):weapon==='bow'?510:weapon==='comet'?480:weapon==='ember'?350:weapon==='frost'?(140+level*12)*this.reach:charged?320:240;
+  }
+  get combatFacingTarget(){
+    const target=this.lastMartialTarget,weapon=this.path.weapon;
+    if(target && target.hp>0 && distance2(target,this.player)<this.weaponRange(weapon,this.build[weapon]??1,false)**2)return target;
+    this.lastMartialTarget=undefined;
+  }
   private aimTarget(weapon:WeaponId,level:number,charged:boolean,focused:boolean){
-    const range=weapon==='blade'?(110+level*7)*this.reach*(this.heavyReady?1.3:1):weapon==='bow'?510:weapon==='comet'?480:weapon==='ember'?350:weapon==='frost'?(140+level*12)*this.reach:charged?320:240;
+    const range=this.weaponRange(weapon,level,charged);
     let target=this.nearest(this.player.x,this.player.y,range);
     if(focused || (charged && this.classTalent) || (weapon==='spore' && this.pathId==='fern' && this.masteryActive)){
       let best=range*range;
@@ -235,6 +244,7 @@ export class Combat {
     this.effect({kind:'cast',weapon,x:this.player.x,y:this.player.y,tx:target.x,ty:target.y});
     const scale=SPELL_DAMAGE[level]*this.power*(focused?1.25:1);
     if(weapon==='blade'||weapon==='bow'){
+      this.lastMartialTarget=target;
       const p=this.player,angle=Math.atan2(target.y-p.y,target.x-p.x);
       this.weaponAngle=angle;this.weaponMotion=1;
       if(weapon==='blade'){
