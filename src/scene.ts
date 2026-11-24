@@ -4,10 +4,11 @@ import {drawLightning,shapeLightning,stormImpactFrame} from './lightning';
 import {FrameStats} from './frameStats';
 import hurtFaces from './hurt-faces.json';
 import {InkMarks,MARK} from './marks';
-import {Combat,RITUAL_TIME,type Effect} from './combat';
+import {Combat,LAMP_LURE_RADIUS,RITUAL_TIME,type Effect} from './combat';
 
 import turnAtlas from './traveler-turns.json';
 import travelerAtlas from './traveler-atlas.json';
+import ancientTreeAtlas from './ancient-tree.json';
 import { enemyPoseFrame, enemyRestFrame } from './enemyPose';
 import { EnemyHealth, HEALTH_FONT } from './enemyHealth';
 import { PickupSprites } from './pickups';
@@ -17,7 +18,14 @@ import {WitchRig} from './rig';
 import {MartialRig} from './martialRig';
 import type {AudioDirector} from './audio';
 
-const enemyTexture=(kind:string)=>kind==='boar'||kind==='mothQueen'||kind==='boss'?'mini-bosses':'enemies';
+const enemyTexture=(kind:string)=>kind==='boss'?'ancient-tree':kind==='boar'||kind==='mothQueen'?'mini-bosses':'enemies';
+function sheetFrame(texture:string,pose:number){
+  const phase=Math.floor(pose/72),local=pose%24;
+  if(texture==='ancient-tree')return phase*24+local;
+  if(texture==='mini-bosses')return phase*48+pose%72;
+  if(texture==='beetle-broken')return local;
+  return pose;
+}
 const TINT:Record<string,number>={spark:0xa0ecdf,spore:0xc4d599,leaf:0xe2d79b,ember:0xf2b17a,frost:0xb8d9ef,comet:0xd2b0e5,enemy:0xf29483};
 type VisualEffect=Effect&{life:number;max:number;fromWand?:boolean;arc?:ReturnType<typeof shapeLightning>};
 export interface SceneHooks {tick:(sim:Combat,stats:FrameStats)=>void;health:(sim:Combat)=>void;showFps:()=>boolean;upgrade:()=>void;gift:()=>void;relic:()=>void;wound:(dx:number,dy:number,low:boolean)=>void;end:()=>void;pause:()=>void;ready:()=>void;error:(message:string)=>void;audio:AudioDirector;lowQuality:()=>boolean;showEnemyHealth:()=>boolean;showEnemyHealthNumbers:()=>boolean}
@@ -44,11 +52,14 @@ export class ForestScene extends Phaser.Scene {
     this.load.spritesheet('hunter-motion',art('hunter-motion.png'),{frameWidth:128,frameHeight:128});
     this.load.atlas('hurt-faces',art('hurt-faces.png'),hurtFaces);
     this.load.spritesheet('mini-bosses',art('mini-bosses.png'),{frameWidth:128,frameHeight:128});
+    this.load.atlas('ancient-tree',art('ancient-tree.webp'),ancientTreeAtlas);
     this.load.spritesheet('profession-marks',art('profession-marks.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('field',art('field-marks.png'),{frameWidth:96,frameHeight:96});
     this.load.spritesheet('storm-impact',art('storm-impact.png'),{frameWidth:64,frameHeight:64});
     this.load.image('coin',art('coin.png'));
     this.load.image('thorn-cache',art('thorn-cache.png'));
+    this.load.image('fern-hollow',art('fern-hollow.png'));
+    this.load.spritesheet('beetle-broken',art('beetle-broken.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('pickups',art('pickups.png'),{frameWidth:64,frameHeight:64});
     this.load.image('ground',art('woodcut-ground.webp'));this.load.image('props',art('woodcut-props.png'));this.load.spritesheet('enemies',art('enemy-poses.png'),{frameWidth:128,frameHeight:128});
     this.load.spritesheet('grip',art('grip-parts.png'),{frameWidth:128,frameHeight:128});
@@ -151,7 +162,8 @@ export class ForestScene extends Phaser.Scene {
       if(this.sim.giftPending){this.running=false;this.hooks.gift();break;}
       if(this.sim.pendingLevels>0){this.running=false;this.hooks.upgrade();break;}
     }
-    this.rig.update(dt,this.sim.player.moving,this.sim.player.angle,this.sim.player.invincible>0,this.sim.seconds,this.sim.dashTime);
+    const readyPose=this.sim.path.job==='mage'?this.sim.focus>=1:this.sim.heavyReady;
+    this.rig.update(dt,this.sim.player.moving,this.sim.player.angle,this.sim.player.invincible>0,this.sim.seconds,this.sim.dashTime,readyPose);
     // Render between the two fixed simulation samples on high-refresh displays.
     const blend=this.sim.path.job==='hunter' && this.running?Math.min(1,this.accumulator*60):1;
     const p=this.sim.player;
@@ -167,6 +179,11 @@ export class ForestScene extends Phaser.Scene {
         this.rig!.hurt(dx,dy);this.hooks.audio.hurt();this.hooks.wound(-dx,-dy,this.hooks.lowQuality());
       }
       if(effect.kind==='dash'||effect.kind==='evade')this.hooks.audio.play(effect.kind);
+      if(effect.kind==='slash' && effect.empowered && this.rig instanceof MartialRig){
+        this.rig.cleave();
+        this.hooks.audio.heavySwing();
+      }
+      if(effect.kind==='synergy' && effect.weapon==='bow')this.hooks.audio.igniteArrow();
       if(effect.kind==='cast'){
         const job=this.sim!.path.job;
         if(job==='mage'||effect.weapon===this.sim!.path.weapon||(job==='hunter'&&(effect.weapon==='ember'||effect.weapon==='comet')))this.rig!.cast(effect.tx!-effect.x,effect.ty!-effect.y);
@@ -183,12 +200,13 @@ export class ForestScene extends Phaser.Scene {
         continue;
       }
       if(effect.kind==='defeat'){this.showDefeat(effect);continue;}
+      if(effect.kind==='shellBreak')this.hooks.audio.impact(true,'blade');
       if(effect.kind==='gather'){
         if(this.sim!.seconds-this.lastGather<.12)continue;
         this.lastGather=this.sim!.seconds;this.hooks.audio.gather();
       }
       if(effect.kind==='strike'){
-        this.hooks.audio.impact((effect.radius??0)>18,effect.weapon);
+        this.hooks.audio.impact((effect.radius??0)>18,effect.weapon,effect.empowered);
         if(effect.weapon==='spark')continue; // Each chain hop paints its own timed impact.
       }
       if(effect.kind==='wound'){
@@ -214,7 +232,11 @@ export class ForestScene extends Phaser.Scene {
     const angle=effect.tx??0;
     r.x=effect.x;r.y=effect.y-10;r.age=0;r.size=(effect.radius??17)*3.5*1.16;
     r.dx=Math.cos(angle)*15;r.dy=Math.sin(angle)*10;
-    r.sprite.setTexture(enemyTexture(effect.enemyKind),enemyRestFrame(effect.enemyKind)+(enemyTexture(effect.enemyKind)==='mini-bosses'?72:0)).setFlipX(effect.x>this.sim!.player.x)
+    const broken=effect.enemyKind==='beetle' && 'shellBroken' in effect && effect.shellBroken===true;
+    const texture=broken?'beetle-broken':enemyTexture(effect.enemyKind);
+    const chief=texture==='mini-bosses'||texture==='ancient-tree';
+    const frame=sheetFrame(texture,enemyRestFrame(effect.enemyKind)+(chief?72:0));
+    r.sprite.setTexture(texture,frame).setFlipX(effect.x>this.sim!.player.x)
       .setDepth(998).setVisible(true);
   }
   private drawRemains(dt:number) {
@@ -236,6 +258,18 @@ export class ForestScene extends Phaser.Scene {
     const view=this.cameras.main.worldView;
     const visible=(x:number,y:number,margin:number)=>x>=view.left-margin && x<=view.right+margin && y>=view.top-margin && y<=view.bottom+margin;
     const cache=sim.cacheSite;
+    const lampGlow=sim.lampGlow;
+    if(lampGlow && lampGlow.until>sim.seconds && visible(lampGlow.x,lampGlow.y,80)){
+      const fade=Math.min(1,lampGlow.until-sim.seconds);
+      g.fillStyle(0xe6be74,.08*fade);g.fillEllipse(lampGlow.x,lampGlow.y,116,64);
+      g.fillStyle(0xffdc87,.13*fade);g.fillEllipse(lampGlow.x,lampGlow.y-8,54,39);
+      this.fieldMarks.paint(MARK.lamp,lampGlow.x,lampGlow.y-18,64);
+      for(let i=0;i<5;i++){
+        const phase=(sim.seconds*.65+i*.21)%1;
+        const x=lampGlow.x+Math.sin(i*2.4+phase*3)*13;
+        g.fillStyle(0xffe7a1,Math.sin(Math.PI*phase)*fade);g.fillCircle(x,lampGlow.y-26-phase*28,1.6);
+      }
+    }
     if(cache && visible(cache.x,cache.y,78)){
       this.cacheMarker.setVisible(true).setPosition(cache.x,cache.y);
       g.fillStyle(0xb89860,.09);g.fillCircle(cache.x,cache.y,52);
@@ -270,18 +304,33 @@ export class ForestScene extends Phaser.Scene {
       living.add(enemy.id);let sprite=this.sprites.get(enemy.id);
       if(!sprite){
         sprite=this.spritePool.pop()??this.add.image(0,0,'enemies');
-        sprite.setTexture(enemyTexture(enemy.kind),enemyRestFrame(enemy.kind)).setVisible(true);this.sprites.set(enemy.id,sprite);
+        const baseTexture=enemyTexture(enemy.kind);
+        sprite.setTexture(baseTexture,sheetFrame(baseTexture,enemyRestFrame(enemy.kind))).setVisible(true);this.sprites.set(enemy.id,sprite);
       }
-      if(enemy.frozen<=0 || enemy.flash>0){
+      const broken=enemy.kind==='beetle' && enemy.shellBroken;
+      const texture=broken?'beetle-broken':enemyTexture(enemy.kind);
+      if(enemy.frozen<=0 || enemy.flash>0 || sprite.texture.key!==texture){
         const distance=Math.hypot(enemy.x-sim.player.x,enemy.y-sim.player.y);
-        const frame=enemyPoseFrame(enemy,distance);
-        if(Number(sprite.frame.name)!==frame)sprite.setFrame(frame);
+        const pose=enemyPoseFrame(enemy,distance);
+        const frame=sheetFrame(texture,pose);
+        if(sprite.texture.key!==texture)sprite.setTexture(texture,frame);
+        else if(Number(sprite.frame.name)!==frame)sprite.setFrame(frame);
       }
       const recoil=enemy.flash/.08,weight=enemy.kind==='boss'?2:6,size=enemy.radius*3.5;
       const airborne=enemy.kind==='moth'||enemy.kind==='mothQueen'||enemy.kind==='crystal';
       const lift=airborne?Math.sin(enemy.gait*9+enemy.id)*2:enemy.kind==='slime'?Math.abs(Math.sin(enemy.gait*4.7+enemy.id))*2:0;
+      const lured=enemy.kind==='moth' && lampGlow && lampGlow.until>sim.seconds &&
+        (enemy.x-lampGlow.x)**2+(enemy.y-lampGlow.y)**2<=LAMP_LURE_RADIUS**2;
+      const targetX=lured?lampGlow.x:sim.player.x;
+      if(lured){
+        const phase=(sim.seconds*1.2+enemy.id*.37)%1;
+        const dx=lampGlow.x-enemy.x,dy=lampGlow.y-enemy.y;
+        const step=phase*Math.min(.55,40/Math.max(1,Math.hypot(dx,dy)));
+        g.fillStyle(0xffdd92,.83*Math.sin(Math.PI*phase));
+        g.fillCircle(enemy.x+dx*step,enemy.y-9+dy*step,1.9);
+      }
       sprite.setPosition(enemy.x+Math.cos(enemy.hitAngle)*recoil*weight,enemy.y-10-lift+Math.sin(enemy.hitAngle)*recoil*weight)
-        .setDisplaySize(size*1.16,size*1.16).setFlipX(enemy.charge || (enemy.preparing && (enemy.kind==='boar'||enemy.kind==='beetle'||enemy.kind==='twig'||enemy.kind==='brute')) ? Math.cos(enemy.charge?.angle??enemy.attackHeading??0)<0 : enemy.x>sim.player.x);
+        .setDisplaySize(size*1.16,size*1.16).setFlipX(enemy.charge || (enemy.preparing && (enemy.kind==='boar'||enemy.kind==='beetle'||enemy.kind==='twig'||enemy.kind==='brute')) ? Math.cos(enemy.charge?.angle??enemy.attackHeading??0)<0 : enemy.x>targetX);
       if(showHealth)this.health.draw(enemy,sprite.x,sprite.y-size*.46,showNumbers);
       const depth=1000+Math.floor((enemy.y-sim.player.y)/4);if(sprite.depth!==depth)sprite.setDepth(depth);
       if(enemy.flash>.055)sprite.setTint(0xffcf99);else if(enemy.slow>0)sprite.setTint(0xa9d4f0);else sprite.clearTint();
@@ -336,6 +385,17 @@ export class ForestScene extends Phaser.Scene {
         g.lineBetween(tip.x-r*1.6,tip.y,tip.x+r*1.6,tip.y);
         g.lineBetween(tip.x,tip.y-r*1.6,tip.x,tip.y+r*1.6);
         g.fillStyle(0xffedbe,alpha);g.fillCircle(tip.x,tip.y,r*.6);
+      }else if(e.kind==='shellBreak'){
+        const age=1-alpha, spread=(e.radius??24)*(.45+age);
+        for(let i=0;i<(this.hooks.lowQuality()?3:6);i++){
+          const angle=i*2.4+e.x*.03, cx=e.x+Math.cos(angle)*spread, cy=e.y-10+Math.sin(angle)*spread*.5-22*Math.sin(age*Math.PI);
+          const dx=Math.cos(angle+age)*6, dy=Math.sin(angle+age)*6;
+          g.fillStyle(i%2?0x819583:0xe1ba85,alpha);
+          g.fillTriangle(cx+dx,cy+dy,cx-dx,cy-dy,cx+dy*.7,cy-dx*.7);
+        }
+      }else if(e.kind==='lure'){
+        const reach=15+(1-alpha)*41;
+        g.lineStyle(2,0xffe7a1,alpha*.7);g.strokeEllipse(e.x,e.y,reach*2,reach);
       }else if(e.kind==='gather'){
         const reach=3+alpha*10;
         for(let i=0;i<3;i++){const a=i*2.094+.4;g.fillStyle(0xffdd8b,alpha);g.fillCircle(e.x+Math.cos(a)*reach,e.y+Math.sin(a)*reach,1+alpha*1.6);}
@@ -357,7 +417,17 @@ export class ForestScene extends Phaser.Scene {
         for(let i=0;i<(this.hooks.lowQuality()?3:8);i++){const a=i*Math.PI/4;this.hitMarks.paint(MARK.frost,e.x+Math.cos(a)*radius,e.y+Math.sin(a)*radius,18+alpha*9,a+Math.PI/2,alpha);}
       }else if(e.kind==='strike'){
         const sim=this.sim!;
-        if(sim.path.job==='hunter' && (e.weapon==='ember'||e.weapon==='comet'||(e.weapon==='bow'&&sim.build.ember))){
+        if(e.weapon==='bow' && e.empowered){
+          const angle=e.tx??0,ux=Math.cos(angle),uy=Math.sin(angle);
+          const reach=6+22*(1-alpha);
+          g.lineStyle(2,0xefdb98,alpha).lineBetween(e.x+ux*reach,e.y+uy*reach-4,e.x+ux*(reach+10),e.y+uy*(reach+10)-4);
+          for(const side of [-1,1]){
+            const x=e.x+ux*reach-uy*side*5,y=e.y+uy*reach+ux*side*5-4;
+            g.lineStyle(1.5,0xc1d1a2,alpha).lineBetween(x,y,x-ux*7-uy*side*3,y-uy*7+ux*side*3);
+          }
+          continue;
+        }
+        if(sim.path.job==='hunter' && (e.weapon==='ember'||e.weapon==='comet')){
           this.jobHits.paint(e.weapon==='comet'?5:4,e.x,e.y-4,42+30*(1-alpha),e.tx??0,alpha);
           continue;
         }
@@ -379,6 +449,13 @@ export class ForestScene extends Phaser.Scene {
         }
        }else if(e.kind==='slash'){
         drawMelee(g,e.x,e.y,e.radius!,e.tx!,1-alpha);
+        if(e.empowered){
+          drawMelee(g,e.x,e.y,e.radius!*.82,e.tx!-.12,Math.min(.99,1-alpha+.09));
+          const a=e.tx!-.8+1.68*Math.min(1,(1-alpha)/.64),r=e.radius!;
+          this.jobHits.paint(2,e.x+Math.cos(a)*r,e.y+Math.sin(a)*r,16+12*alpha,a+Math.PI*.5,alpha);
+        }
+      }else if(e.kind==='synergy' && e.weapon==='bow'){
+        this.jobHits.paint(4,e.x,e.y-4,32+(1-alpha)*23,e.tx??0,alpha);
       }else if(e.kind==='impactZone'){
         if(e.shape==='cleave')drawMelee(g,e.x,e.y,e.radius!,e.tx??0,1-alpha);
         else {const r=e.radius!;g.lineStyle(3,0xd7ba87,alpha*.73).strokeCircle(e.x,e.y,r*(1.06-alpha*.15));if(e.shape==='ring')g.lineStyle(2,0xe9d3ab,alpha*.60).strokeCircle(e.x,e.y,r*.54);}

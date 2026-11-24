@@ -24,12 +24,12 @@ export const WEAPONS = ABILITIES.filter(a=>a.kind==='weapon');
 export const MASTERY_LEVEL=6;
 export const MASTERIES:Record<CharacterId,{name:string;tip:string;details:string}>={
   hazel:{name:'游雷',tip:'移动蓄电，拉开距离打出重雷。',details:'每移动 22 步充满电。满电首击伤害提高 65%，射程增至 32 步。只击中一个敌人时，剩余跳数追加伤害。'},
-  fern:{name:'根阵',tip:'绕着孢子场走，把追兵引回阵里。',details:'孢子场落地 1 秒后，踏入或留在场内可令其开花一次。场中敌人受到额外伤害并定身 0.7 秒，首领改为短暂减速，并在这片花阵中多受 35% 孢子伤害。'},
+  fern:{name:'根阵',tip:'绕着孢子场走，把追兵引回阵里。',details:'孢子场落地 1 秒后，踏入或留在场内可令其开花一次。场中敌人受到额外伤害并定身 0.7 秒，首领改为短暂减速，并在这片花阵中多受 35% 孢子伤害。六级起优先向首领或精英放阵。首领离开成熟孢场后仍受伤 2 秒。'},
   ash:{name:'焰枪',tip:'对准敌阵闪避，沿途打穿前排。',details:'发动闪避时，沿闪避方向射出一道焰枪，最多贯穿 3 个目标并点燃。焰枪伤害随余烬等级成长。'}
 };
 export const CLASS_TALENTS:Record<CharacterId,{name:string;description:string}>={
   hazel:{name:'引雷针',description:'满电的星雷优先锁定射程内的首领或精英，并对它的首击额外提高 25%。'},
-  fern:{name:'返青',description:'一次根阵开花卷入至少两个敌人时，恢复 3 点生命。'},
+  fern:{name:'返青',description:'开花命中首领或两个敌人时，回复 3 生命。'},
   ash:{name:'回火',description:'同一支焰枪穿过第二个敌人时，闪避剩余冷却缩短 1 秒。'}
 };
 export const SYNERGIES = [

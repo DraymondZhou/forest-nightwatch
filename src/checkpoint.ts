@@ -6,7 +6,7 @@ import {readPurse} from './camp';
 
 type Offer=(UpgradeId|'mastery')[];
 // Spatial indexes, render effects and scratch arrays are rebuilt on the next frame.
-const fields=('lastHit previousHit coins player build enemies shots zones drops seconds level xp kills pendingLevels bossSpawned synergySeen damageByWeapon dashCooldown dashTime dashAngle dodges shrinesLit shrine cacheSite cacheGuarded queued trialDone kit giftPending flameTime miniSpawned counterReady swings weaponAngle weaponMotion waveHint waveHintUntil relicPending relic rerolls focus stormCharge classTalent nextShrine evadeWindow harvestTime id spawnClock eliteClock weaponClocks leafClock ticks').split(' ');
+const fields=('lastHit previousHit coins player build enemies shots zones drops seconds level xp kills pendingLevels bossSpawned synergySeen damageByWeapon dashCooldown dashTime dashAngle dodges shrinesLit lampGlow shrine cacheSite cacheGuarded queued trialDone kit giftPending flameTime miniSpawned counterReady perfectCounter swings weaponAngle weaponMotion waveHint waveHintUntil relicPending relic rerolls focus stormCharge classTalent nextShrine evadeWindow harvestTime id spawnClock eliteClock weaponClocks leafClock ticks').split(' ');
 
 export function packRun(game:Combat,offer?:Offer){
   const state=Object.fromEntries(fields.map(key=>[key,Reflect.get(game,key)]));

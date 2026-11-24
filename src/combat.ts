@@ -10,16 +10,17 @@ import { enemyHealthScale,latePressure,DIFFICULTIES,rampDifficulty,type Difficul
 import { ATTACK_POSE_TIME } from './enemyPose';
 
 export type EnemyKind='slime'|'moth'|'twig'|'spitter'|'beetle'|'brute'|'crystal'|'boss'|'boar'|'mothQueen';
-export interface Enemy {id:number;kind:EnemyKind;x:number;y:number;hp:number;maxHp:number;radius:number;speed:number;attack:number;phase:number;clock:number;slow:number;frozen:number;rooted:number;burn:number;burnClock:number;spore:number;proc:number;flash:number;hitAngle:number;gait:number;attackPose:number; charge?:{angle:number;remaining:number}; preparing?:number; windupTime?:number; attackHeading?:number; pattern?:number; recovery?:number}
+export interface Enemy {id:number;kind:EnemyKind;x:number;y:number;hp:number;maxHp:number;radius:number;speed:number;attack:number;phase:number;clock:number;slow:number;frozen:number;rooted:number;burn:number;burnClock:number;spore:number;proc:number;flash:number;hitAngle:number;gait:number;attackPose:number; charge?:{angle:number;remaining:number}; preparing?:number; windupTime?:number; attackHeading?:number; pattern?:number; recovery?:number;shellBroken?:boolean;pollenTicks?:number;pollenClock?:number;pollenDamage?:number}
 export const isChief=(kind:EnemyKind)=>kind==='boss'||kind==='boar'||kind==='mothQueen';
 export const chiefName=(kind:EnemyKind)=>kind==='boar'?'棘冠山主':kind==='mothQueen'?'月绒蛾后':'古树守卫';
 export interface Shot {id:number;x:number;y:number;vx:number;vy:number;life:number;radius:number;damage:number;weapon:WeaponId|'enemy';pierce:number;lance?:boolean; missile?:'sap'|'shard'|'seed'|'dust'; trialShot?:boolean; aimed?:boolean;hit:Set<number>}
 export interface Zone {id:number;x:number;y:number;radius:number;life:number;tick:number;damage:number;kind:'spore'|'ember'|'warning';timer:number;bloomed?:boolean; shape?:'disk'|'ring'|'lane'|'cleave'; angle?:number; owner?:number; duration?:number}
 export interface Drop {id:number;x:number;y:number;value:number;born:number;kind:'xp'|'heal'|'coin'}
-export interface Effect {kind:'impactZone'|'slash'|'bloom'|'wound'|'dash'|'evade'|'defeat'|'gather'|'strike'|'cast'|'hit'|'chain'|'burst'|'frost'|'heal'|'level'|'synergy';x:number;y:number;enemyKind?:EnemyKind;weapon?:WeaponId;tx?:number;ty?:number;radius?:number;color?:number;text?:string;shape?:Zone['shape'];arcSeed?:number;hop?:number;empowered?:boolean}
+export interface Effect {kind:'shellBreak'|'lure'|'impactZone'|'slash'|'bloom'|'wound'|'dash'|'evade'|'defeat'|'gather'|'strike'|'cast'|'hit'|'chain'|'burst'|'frost'|'heal'|'level'|'synergy';x:number;y:number;enemyKind?:EnemyKind;shellBroken?:boolean;weapon?:WeaponId;tx?:number;ty?:number;radius?:number;color?:number;text?:string;shape?:Zone['shape'];arcSeed?:number;hop?:number;empowered?:boolean}
 export interface Controls {x:number;y:number;dash?:boolean}
 export interface Shrine {x:number;y:number;charge:number;expires:number}
 export type ShrineGift = 'spring' | 'flame';
+export const LAMP_LURE_RADIUS=260;
 export const RITUAL_TIME = 3.2;
 const DASH_TIME = .2;
 // Later ranks still unlock jumps, extra projectiles or area. Raw damage grows more slowly.
@@ -36,11 +37,12 @@ export class Combat {
   seconds=0;level=1;xp=0;kills=0;pendingLevels=0;ended=false;won=false;bossSpawned=false;synergySeen=false;
   damageByWeapon:Partial<Record<WeaponId,number>>={};
   dashCooldown=0; dashTime=0; dashAngle=0; dodges=0; shrinesLit=0;
+  lampGlow?:{x:number;y:number;until:number};
   cacheSite?:Shrine; private cacheGuarded=false;
   queued?:{id:UpgradeId;left:number};
   trialDone=false; kit=false;
   shrine?:Shrine; giftPending=false; flameTime=0;
-  miniSpawned=false; counterReady=false; swings=0; weaponAngle=0; weaponMotion=0;
+  miniSpawned=false; counterReady=false;perfectCounter=false; swings=0; weaponAngle=0; weaponMotion=0;
   waveHint=''; private waveHintUntil=0;
   relicPending=false;relic?:RelicId;rerolls=1;focus=0;
   takeRelic(id:RelicId){
@@ -83,7 +85,8 @@ export class Combat {
   get rules(){return DIFFICULTIES[this.difficulty];}
   get pickupRadius(){return (98+(this.build.reach??0)*12)*1.2+(this.harvestTime>0?145:0);}
   get boss() {return this.enemies.find(e=>e.kind==='boss')??this.enemies.find(e=>isChief(e.kind));}
-  get power() {return (1+(this.build.power??0)*0.10)*(this.flameTime>0?1.30:1)*(this.relic==='stillglass'&&this.focus>=1?1.25:1);}
+  get heavyReady(){return this.pathId==='breaker' && this.masteryActive && this.swings%3===2;}
+  get power() {return (1+(this.build.power??0)*0.10)*(this.flameTime>0?1.30:1);}
   get reach() {return 1+(this.build.reach??0)*0.1;}
   get haste() {return CAST_INTERVAL[this.build.haste??0];}
   get walkSpeed(){return walkSpeed(this.training)*(1+(this.build.stride??0)*.08);}
@@ -137,7 +140,7 @@ export class Combat {
   private effect(effect:Effect){if(this.effects.length<100)this.effects.push(effect);}
   private hurt(amount:number,sourceX:number,sourceY:number,kind:AttackNote='contact') {
     if(this.evadeWindow>0 && this.player.invincible<=0 && !this.ended){
-      if(this.pathId==='guard' && this.masteryActive && kind==='cleave')this.counterReady=true;
+      if(this.pathId==='guard' && this.masteryActive && kind==='cleave'){this.counterReady=true;this.perfectCounter=true;}
       if(this.harvestTime<=0){
         this.dodges++;this.harvestTime=.75;
         this.effect({kind:'evade',x:this.player.x,y:this.player.y,color:0xc2ecc1,radius:40});
@@ -154,17 +157,19 @@ export class Combat {
       color:0xf19a8a,radius:amount,text:'−'+Math.round(amount)});
     if(this.player.hp<=0){this.fatal={kind,damage:amount};this.ended=true;}
   }
-  private hit(e:Enemy,damage:number,weapon:WeaponId,secondary=false,fromAngle?:number,area=false) {
+  private hit(e:Enemy,damage:number,weapon:WeaponId,secondary=false,fromAngle?:number,area=false,empowered=false) {
     if(e.hp<=0)return;
     // A beetle's shell absorbs broad impacts. Direct spells, poison and burn still deal full damage.
-    if(e.kind==='beetle' && (area||weapon==='leaf'||weapon==='frost'))damage*=.48;
+    if(e.kind==='beetle' && !e.shellBroken && (area||weapon==='leaf'||weapon==='frost'))damage*=.48;
+    // The exposed core is vulnerable only during the guardian's stomp recovery.
+    if(e.kind==='boss' && e.recovery && !secondary)damage*=1.25;
     const applied=Math.min(e.hp,damage);e.hp-=damage;e.flash=0.08;
     this.damageByWeapon[weapon]=(this.damageByWeapon[weapon]??0)+applied;
     const angle = fromAngle ?? Math.atan2(e.y-this.player.y,e.x-this.player.x);
     e.hitAngle = angle;
-    if (e.hp <= 0) this.effect({kind:'defeat', x:e.x, y:e.y, tx:angle, radius:e.radius, enemyKind:e.kind});
+    if (e.hp <= 0) this.effect({kind:'defeat', x:e.x, y:e.y, tx:angle, radius:e.radius, enemyKind:e.kind,shellBroken:e.shellBroken});
     if (!secondary && weapon !== 'spore') {
-      this.effect({kind:'strike',weapon,x:e.x,y:e.y,tx:angle,
+      this.effect({kind:'strike',weapon,empowered,x:e.x,y:e.y,tx:angle,
         radius:e.hp<=0?24:14,color:weapon==='ember'?0xffbb76:weapon==='spark'?0xb7e4d4:0xe5cb93});
     }
     if(this.ticks%4===0||damage>35)this.effect({kind:'hit',x:e.x,y:e.y,text:String(Math.round(damage)),color:0xf4db9c});
@@ -174,6 +179,7 @@ export class Combat {
         e.proc=.70;this.hit(e,8*this.power,'leaf',true);
       }else if(weapon==='bow'&&this.build.ember){
         if(e.burn<=0)e.burnClock=.5;e.burn=Math.max(e.burn,2);e.proc=.60;
+        this.effect({kind:'synergy',weapon:'bow',x:e.x,y:e.y,tx:angle,radius:22,color:0xe39855});
       }else if(weapon==='spark'&&e.spore>0&&this.build.spore){
         e.spore=0;e.proc=1.2;this.effect({kind:'synergy',x:e.x,y:e.y,radius:65,color:0xb5e9ae});
         for(const n of this.nearby(e.x,e.y,65))this.hit(n,12*this.power,'spark',true,undefined,true);
@@ -193,20 +199,25 @@ export class Combat {
   }
   private cast(weapon:WeaponId,level:number) {
     const charged=weapon==='spark' && this.pathId==='hazel' && this.masteryActive && this.stormCharge>=1;
-    let target=this.nearest(this.player.x,this.player.y,weapon==='blade'?(110+level*7)*this.reach*(this.pathId==='breaker'&&this.masteryActive&&this.swings%3===2?1.3:1):weapon==='bow'?510:weapon==='comet'?480:weapon==='ember'?350:charged?320:240);
-    if(charged && this.classTalent){
-      let best=320*320;
+    const focused=this.relic==='stillglass' && this.focus>=1 && weapon===this.path.weapon;
+    const projectile=weapon==='bow'||weapon==='comet'||weapon==='ember';
+    if(projectile && this.shots.length>=280)return false;
+    const range=weapon==='blade'?(110+level*7)*this.reach*(this.heavyReady?1.3:1):weapon==='bow'?510:weapon==='comet'?480:weapon==='ember'?350:weapon==='frost'?(140+level*12)*this.reach:charged?320:240;
+    let target=this.nearest(this.player.x,this.player.y,range);
+    if(focused || (charged && this.classTalent) || (weapon==='spore' && this.pathId==='fern' && this.masteryActive)){
+      let best=range*range;
       for(const e of this.enemies){
         if(e.hp<=0 || (!isChief(e.kind) && e.kind!=='brute' && e.kind!=='crystal'))continue;
         const d=distance2(e,this.player);
-        if(d>=320*320)continue;
+        if(d>=range*range)continue;
         if(isChief(e.kind)){target=e;break;}
         if(d<best){target=e;best=d;}
       }
     }
-    if(!target)return;
+    if(!target)return false;
+    if(focused)this.focus=0;
     this.effect({kind:'cast',weapon,x:this.player.x,y:this.player.y,tx:target.x,ty:target.y});
-    const scale=SPELL_DAMAGE[level]*this.power;
+    const scale=SPELL_DAMAGE[level]*this.power*(focused?1.25:1);
     if(weapon==='blade'||weapon==='bow'){
       const p=this.player,angle=Math.atan2(target.y-p.y,target.x-p.x);
       this.weaponAngle=angle;this.weaponMotion=1;
@@ -221,12 +232,12 @@ export class Combat {
         for(const e of targets){
           if(this.relic==='briar'&&targets.length>=3)e.slow=Math.max(e.slow,isChief(e.kind)?.30:1);
           if(heavy && isChief(e.kind))this.trialDone=true;
-          const bonus=heavy&&this.classTalent&&(isChief(e.kind)||e.kind==='brute'||e.kind==='crystal')?1.4:1;
-          this.hit(e,36*scale*(counter?2:heavy?1.7:1)*bonus*(this.relic==='whetstone'&&targets.length===1?1.25:1),'blade',false,angle);
+          const bonus=heavy&&this.classTalent&&(isChief(e.kind)||e.kind==='brute'||e.kind==='crystal')?1.65:1;
+          this.hit(e,36*scale*(counter?(this.perfectCounter?2.4:1.75):heavy?1.7:1)*bonus*(this.relic==='whetstone'&&targets.length===1?1.25:1),'blade',false,angle);
         }
         if(this.kit && (heavy||counter) && targets.length)this.dashCooldown=Math.max(0,this.dashCooldown-1);
-        if(counter&&this.classTalent&&targets.length)p.hp=Math.min(p.maxHp,p.hp+6);
-        this.counterReady=false;this.effect({kind:'slash',x:p.x,y:p.y,tx:angle,radius});
+        if(counter&&this.classTalent&&targets.length)p.hp=Math.min(p.maxHp,p.hp+(this.perfectCounter?8:3));
+        this.counterReady=this.perfectCounter=false;this.effect({kind:'slash',empowered:heavy,x:p.x,y:p.y,tx:angle,radius});
       }else{
         const volley=this.pathId==='volley',arrows=volley?(this.masteryActive?5:3):1;
         const feather=this.relic==='longfeather'&&distance2(p,target)>200**2;
@@ -263,6 +274,7 @@ export class Combat {
       this.fire('comet',target,40*scale,560,4+level);
       if(level>=3)this.fire('comet',target,24*scale,560,3,0.12);
     }
+    return true;
   }
   private warn(e:Enemy,shape:NonNullable<Zone['shape']>,x:number,y:number,radius:number,angle:number,duration:number){
     e.preparing=e.windupTime=duration;e.attackHeading=angle;e.attackPose=0;
@@ -277,7 +289,16 @@ export class Combat {
     const inRadius=d<=z.radius;
     const hit=inRadius && (z.shape==='ring'?d>=z.radius*.54:z.shape==='cleave'?dx*Math.cos(angle)+dy*Math.sin(angle)>=d*Math.cos(.85):true);
     if(hit)this.hurt(z.damage,z.x,z.y,z.shape==='ring'?'ring':z.shape==='cleave'?'cleave':'disk');
-    if(owner?.kind==='boss' && z.shape==='disk')owner.recovery=1.15;
+    if(owner?.kind==='boss' && z.shape==='disk'){
+      owner.recovery=1.15;
+      for(const enemy of this.nearby(z.x,z.y,z.radius)){
+        if(enemy.kind!=='beetle' || enemy.shellBroken)continue;
+        enemy.shellBroken=true;enemy.hp-=Math.min(enemy.hp,enemy.maxHp*.30);
+        enemy.flash=.08;
+        this.effect({kind:'shellBreak',x:enemy.x,y:enemy.y,radius:enemy.radius});
+        if(enemy.hp<=0)this.effect({kind:'defeat',x:enemy.x,y:enemy.y,enemyKind:enemy.kind,shellBroken:true,radius:enemy.radius});
+      }
+    }
     this.effect({kind:'impactZone',x:z.x,y:z.y,radius:z.radius,tx:angle,shape:z.shape});
   }
   private enemyShot(e:Enemy,angle:number,speed=145){if(this.shots.length>=280)return;this.shots.push({id:this.nextId(),x:e.x,y:e.y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:5,radius:e.kind==='crystal'?5:e.kind==='spitter'?9:7,missile:e.kind==='spitter'?'sap':e.kind==='crystal'?'shard':e.kind==='mothQueen'?'dust':'seed',damage:e.attack,weapon:'enemy',pierce:1,hit:new Set()});}
@@ -372,6 +393,8 @@ export class Combat {
     // Stepping out to dodge preserves the part already kindled.
     if(distance2(lamp,this.player)<=52**2)lamp.charge+=dt;
     if(lamp.charge>=RITUAL_TIME){
+      this.lampGlow={x:lamp.x,y:lamp.y,until:this.seconds+6};
+      this.effect({kind:'lure',x:lamp.x,y:lamp.y,radius:LAMP_LURE_RADIUS});
       this.shrinesLit++;this.cacheSite=this.shrine=undefined;this.giftPending=true;
     }
   }
@@ -388,7 +411,8 @@ export class Combat {
     dt=Math.min(dt,0.05);this.weaponMotion=Math.max(0,this.weaponMotion-dt*4.5);this.seconds+=dt;this.ticks++;this.effects.length=0;
     const p=this.player;p.invincible=Math.max(0,p.invincible-dt);
     this.flameTime=Math.max(0,this.flameTime-dt);this.move(dt,control);
-    if(this.relic==='stillglass')this.focus=p.moving?0:Math.min(1,this.focus+dt);
+    if(this.lampGlow && this.seconds>=this.lampGlow.until)this.lampGlow=undefined;
+    if(this.relic==='stillglass' && this.focus<1)this.focus=p.moving?0:Math.min(1,this.focus+dt);
     if(this.seconds>=480){this.ended=true;return;}
     if(this.seconds>=180 && this.seconds<360 && !this.miniSpawned){
       this.miniSpawned=true;this.spawn(this.seed%2===0?'boar':'mothQueen');
@@ -407,6 +431,13 @@ export class Combat {
     if(this.eliteClock<=0&&this.seconds<350){this.spawn(this.rng.next()>.5?'brute':'crystal');this.eliteClock=55/rampDifficulty(55/this.rules.eliteInterval,this.seconds);}
     for(const e of this.enemies){
       if(e.hp<=0)continue;e.rooted=Math.max(0,e.rooted-dt);e.frozen=Math.max(0,e.frozen-dt);if(e.frozen===0)e.clock-=dt;e.slow=Math.max(0,e.slow-dt);e.proc=Math.max(0,e.proc-dt);e.flash=Math.max(0,e.flash-dt);e.spore=Math.max(0,e.spore-dt);
+      if(e.pollenTicks && e.hp>0){
+        e.pollenClock=(e.pollenClock??.5)-dt;
+        if(e.pollenClock<=0){
+          this.hit(e,e.pollenDamage??0,'spore',true);
+          e.pollenClock=.5;e.pollenTicks--;
+        }
+      }
       if(e.burn>0){e.burn-=dt;e.burnClock-=dt;if(e.burnClock<=0){e.burnClock=0.5;this.hit(e,5*this.power*(1+(this.build.ember??1)*0.2),'ember',true);}}
       if (isChief(e.kind) && distance2(e,p)>1150**2) {
         // Preserve health and phase when the runner leaves the encounter behind.
@@ -439,7 +470,13 @@ export class Combat {
         e.attackPose=Math.max(0,e.attackPose-dt);
         if(e.speed>0)e.gait+=dt*speed/e.speed;
       }
-      e.x+=dx/dist*speed*dt;e.y+=dy/dist*speed*dt;
+      const lamp=this.lampGlow;
+      if(e.kind==='moth' && lamp && distance2(e,lamp)<=LAMP_LURE_RADIUS**2){
+        const angle=e.id*2.4+this.seconds;
+        const lx=lamp.x+Math.cos(angle)*16-e.x,ly=lamp.y+Math.sin(angle)*16-e.y;
+        const fraction=Math.min(1,speed*dt/Math.max(.01,Math.hypot(lx,ly)));
+        e.x+=lx*fraction;e.y+=ly*fraction;
+      }else{e.x+=dx/dist*speed*dt;e.y+=dy/dist*speed*dt;}
       if(!e.recovery && e.frozen<=0 && dist<e.radius+15 && e.kind!=='boar' && e.kind!=='brute' && e.kind!=='beetle' && e.kind!=='twig'){
         if(p.invincible<=0 && e.frozen<=0)e.attackPose=ATTACK_POSE_TIME;
         this.hurt(e.attack,e.x,e.y);
@@ -477,10 +514,14 @@ export class Combat {
     for(const [id,value] of Object.entries(this.build)){
       const weapon=id as WeaponId;if(!['spark','spore','ember','frost','comet','blade','bow'].includes(id))continue;
       this.weaponClocks[weapon]=(this.weaponClocks[weapon]??0)-dt;
-      if(this.weaponClocks[weapon]!<=0){this.weaponClocks[weapon]=this.attackInterval(weapon);this.cast(weapon,value!);}
+      if(this.weaponClocks[weapon]!<=0 && this.cast(weapon,value!))this.weaponClocks[weapon]=this.attackInterval(weapon);
     }
     this.leafClock-=dt;
-    if(this.build.leaf&&this.leafClock<=0){this.leafClock=this.attackInterval('leaf');const r=(80+this.build.leaf*7)*this.reach;for(const e of this.nearby(p.x,p.y,r))this.hit(e,14*SPELL_DAMAGE[this.build.leaf]*this.power,'leaf');}
+    if(this.build.leaf&&this.leafClock<=0){
+      const enemies=this.nearby(p.x,p.y,(80+this.build.leaf*7)*this.reach);
+      if(enemies.length)this.leafClock=this.attackInterval('leaf');
+      for(const e of enemies)this.hit(e,14*SPELL_DAMAGE[this.build.leaf]*this.power,'leaf');
+    }
     for(const z of this.zones){z.life-=dt;z.timer+=dt;z.tick-=dt;
       if(z.kind==='warning'){if(z.owner!==undefined&&!this.enemies.some(e=>e.id===z.owner&&e.hp>0))z.life=0;else if(z.life<=0)this.resolveWarning(z);continue;}
       if(this.pathId==='fern' && this.masteryActive && z.kind==='spore' && !z.bloomed && z.timer>=1 && distance2(p,z)<=z.radius*z.radius){
@@ -488,13 +529,20 @@ export class Combat {
         const caught=this.nearby(z.x,z.y,z.radius);
         for(const e of caught){
           this.hit(e,z.damage*1.4,'spore',true);
-          if(isChief(e.kind))e.slow=Math.max(e.slow,.85);
+          if(isChief(e.kind)){
+            e.slow=Math.max(e.slow,.85);e.pollenTicks=4;e.pollenClock??=.5;e.pollenDamage=z.damage*.65;
+          }
           else e.rooted=Math.max(e.rooted,.7);
         }
-        if(this.classTalent && caught.length>=2)p.hp=Math.min(p.maxHp,p.hp+3);
+        if(this.classTalent && (caught.length>=2 || caught.some(e=>isChief(e.kind))))p.hp=Math.min(p.maxHp,p.hp+3);
         this.effect({kind:'bloom',x:z.x,y:z.y,radius:z.radius});
       }
-      if(z.tick<=0){z.tick=0.5;for(const e of this.nearby(z.x,z.y,z.radius)){const rootedChief=z.bloomed && isChief(e.kind);this.hit(e,z.damage*(rootedChief?1.35:1),z.kind,true);if(z.kind==='spore')e.spore=2;else e.burn=Math.max(2,e.burn);}}
+      if(z.tick<=0){z.tick=0.5;for(const e of this.nearby(z.x,z.y,z.radius)){const rootedChief=z.bloomed && isChief(e.kind);this.hit(e,z.damage*(rootedChief?1.35:1),z.kind,true);if(z.kind==='spore'){
+        e.spore=2;
+        if(this.pathId==='fern' && this.masteryActive && isChief(e.kind) && z.timer>=1){
+          e.pollenTicks=4;e.pollenClock??=.5;e.pollenDamage=z.damage*(z.bloomed?1:.65);
+        }
+      }else e.burn=Math.max(2,e.burn);}}
     }
     this.zones=this.zones.filter(z=>z.life>0);
     // A full spell field must not erase a windup or cancel the attack it announces.
@@ -507,7 +555,7 @@ export class Combat {
         const aimed=shot.aimed&&this.classTalent&&(isChief(e.kind)||e.kind==='brute'||e.kind==='crystal');
         if(shot.weapon==='bow'&&this.pathId==='volley'&&this.classTalent&&!isChief(e.kind))e.slow=Math.max(.55,e.slow);
         if(shot.trialShot && isChief(e.kind))this.trialDone=true;
-        shot.hit.add(e.id);this.hit(e,shot.damage*(aimed?1.4:1),shot.weapon,false,Math.atan2(shot.vy,shot.vx));shot.pierce--;
+        shot.hit.add(e.id);this.hit(e,shot.damage*(aimed?1.4:1),shot.weapon,false,Math.atan2(shot.vy,shot.vx),false,!!shot.aimed);shot.pierce--;
         if(shot.weapon==='ember'){
           if(e.burn<=0)e.burnClock=.5;
           e.burn=3;

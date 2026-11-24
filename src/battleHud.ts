@@ -41,7 +41,7 @@ export class BattleHud {
     const shrine=s.shrine;
     if(s.bossSpawned){
       const left=Math.max(0,480-Math.floor(s.seconds));
-      this.task.textContent='天亮前击败古树 · '+Math.floor(left/60)+':'+String(left%60).padStart(2,'0');
+      this.task.textContent='天亮前击败古树 · '+Math.floor(left/60)+':'+String(left%60).padStart(2,'0')+(s.seconds<366?' · 砸地可破甲':'');
     }else if(shrine){
       const x=shrine.x-s.player.x,y=shrine.y-s.player.y,distance=Math.hypot(x,y);
       const arrow=['→','↘','↓','↙','←','↖','↑','↗'][(Math.round(Math.atan2(y,x)/(Math.PI/4))+8)%8];

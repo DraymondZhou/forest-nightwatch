@@ -42,7 +42,12 @@ export class Woodland {
         const h = hash(i,j,seed), prop = this.props[index++];
         const frame = h % 4;
         const size = [48,36,60,28][frame] * (.85 + ((h >>> 24) % 40) / 100);
-        prop.setFrame(frame).setDisplaySize(size,size).setFlipX(!!(h & 32));
+        // Broad patches of roots lie flush with the ground and reuse the same prop pool.
+        if((h>>>8)%6===0){
+          const width=100+((h>>>23)%32);
+          prop.setTexture('fern-hollow').setDisplaySize(width,width*110/210);
+        }else prop.setTexture('props',frame).setDisplaySize(size,size);
+        prop.setFlipX(!!(h & 32));
         prop.setPosition(i*200 + 32 + ((h>>>4)%136), j*200 + 32 + ((h>>>12)%136));
         prop.setVisible((h>>>20)%5 !== 0);
       }

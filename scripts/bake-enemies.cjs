@@ -3,7 +3,8 @@ const sharp=require('sharp');
 const path=require('node:path');
 const skeletons=require('./enemy-skeletons.cjs');
 const art=path.join(__dirname,'../public/art');
-const cell=128,columns=12,frames=24,rows=skeletons.length*2;
+const brokenBeetle=process.argv.includes('--broken-beetle');
+const cell=128,columns=12,frames=24,rows=brokenBeetle?2:skeletons.length*2;
 const meshSteps=40,grid=meshSteps+1;
 const output=Buffer.alloc(cell*columns*cell*rows*4);
 
@@ -76,13 +77,20 @@ function triangle(a,b,c,tile,tileSize,left,top){
   }
 }
 async function bake(){
-  for(const [index,bones] of skeletons.entries()){
+  const poses=brokenBeetle?[[4,skeletons[4]]]:skeletons.entries();
+  for(const [index,bones] of poses){
     const size=256;
-    const tile=await sharp(path.join(art,'woodcut-enemies.png')).extract({left:(index%4)*size,top:Math.floor(index/4)*size,width:size,height:size}).ensureAlpha().raw().toBuffer();
+    const source=sharp(path.join(art,'woodcut-enemies.png')).extract({left:(index%4)*size,top:Math.floor(index/4)*size,width:size,height:size});
+    let tile;
+    if(brokenBeetle){
+      const tilePng=await source.png().toBuffer();
+      const mask=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><path d="m124 8 45 9 4 24-12-2 2 13-13-6-9 13-4-17-13 5 3-17Z"/></svg>');
+      tile=await sharp(tilePng).composite([{input:mask,blend:'dest-out'},{input:path.join(__dirname,'beetle-fracture.svg')}]).ensureAlpha().raw().toBuffer();
+    }else tile=await source.ensureAlpha().raw().toBuffer();
     const mesh=bindMesh(bones);
     for(let frame=0;frame<frames;frame++){
       const vertices=poseMesh(mesh,rotations(bones,frame));
-      const left=(frame%columns)*cell,top=(index*2+Math.floor(frame/columns))*cell;
+      const left=(frame%columns)*cell,top=((brokenBeetle?0:index*2)+Math.floor(frame/columns))*cell;
       for(let j=0;j<meshSteps;j++)for(let i=0;i<meshSteps;i++){
         const p=j*grid+i;
         triangle(vertices[p],vertices[p+1],vertices[p+grid],tile,size,left,top);
@@ -90,6 +98,7 @@ async function bake(){
       }
     }
   }
-  await sharp(output,{raw:{width:cell*columns,height:cell*rows,channels:4}}).png({palette:true,colours:160,effort:9,dither:0}).toFile(path.join(art,'enemy-poses.png'));
+  const target=brokenBeetle?'beetle-broken.png':'enemy-poses.png';
+  await sharp(output,{raw:{width:cell*columns,height:cell*rows,channels:4}}).png({palette:true,colours:160,effort:9,dither:0}).toFile(path.join(art,target));
 }
 bake().catch(e=>{console.error(e);process.exitCode=1});

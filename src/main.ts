@@ -40,7 +40,7 @@ function home() {
   page='home'; run=undefined; scene.setPaused(true); scene.sim=undefined;
   audio.combat=false; audio.paused=false;
   hud.hidden=true; panel.hidden=false; app.className='cover';
-  panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?(store.data.checkpoint?action('restore','继续',true):action('select','开始游戏',true)):'<button disabled>游戏加载中…</button>'}${action('camp','营地训练')}${action('journal','守夜手记')}${action('settings','设置')}</nav><small>v1.15.0</small>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
+  panel.innerHTML=`<div class="title"><h1>森光守夜</h1><p lang="en">Forest Nightwatch</p><nav>${ready?(store.data.checkpoint?action('restore','继续',true):action('select','开始游戏',true)):'<button disabled>游戏加载中…</button>'}${action('camp','营地训练')}${action('journal','守夜手记')}${action('settings','设置')}</nav><small>v1.16.0</small>${store.warning?`<small>${store.warning}</small>`:''}</div>`;
 }
 let chosenJob:Job='mage';
 let banked=0,lastCheckpoint=-10;
@@ -136,7 +136,7 @@ function chooseGift(){
   if(!run)return;
   page='gift';checkpoint(true);scene.setPaused(true);audio.play('level');
   const heal=Math.ceil(run.player.maxHp*.30);
-  sheet('林灯已亮','<p>灯芯留住了这片林间的光。选择一项祝福。</p><div class="cards"><button class="card" data-action="gift-spring"><strong>饮泉</strong><span>立即恢复 '+heal+' 生命。当前 '+Math.ceil(run.player.hp)+' / '+run.player.maxHp+'。</span></button><button class="card" data-action="gift-flame"><strong>借火</strong><span>接下来 45 秒，造成的伤害提高 30%。</span></button></div>','');
+  sheet('林灯已亮','<p>灯光吸引飞蛾 6 秒。选择祝福。</p><div class="cards"><button class="card" data-action="gift-spring"><strong>饮泉</strong><span>立即恢复 '+heal+' 生命。当前 '+Math.ceil(run.player.hp)+' / '+run.player.maxHp+'。</span></button><button class="card" data-action="gift-flame"><strong>借火</strong><span>接下来 45 秒，造成的伤害提高 30%。</span></button></div>','');
 }
 function afterChoice(){
   if(!run)return;

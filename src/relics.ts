@@ -1,6 +1,6 @@
 import type {Job} from './stylesOfPlay';
 export const RELICS={
-  stillglass:{job:'mage',name:'琥珀透镜',style:'守住阵地',tip:'站定 1 秒，伤害提高 25%。移动后失效。'},
+  stillglass:{job:'mage',name:'琥珀透镜',style:'守住阵地',tip:'站定 1 秒蓄能，可带着走。下次主法术增伤 25%，优先首领和精英。'},
   waywick:{job:'mage',name:'游火灯芯',style:'引敌追击',tip:'闪避后，原地留火 2 秒，每半秒灼伤敌人。'},
   briar:{job:'warden',name:'荆棘护扣',style:'切入敌群',tip:'一刀砍中 3 个以上敌人时，使其减速 1 秒。首领减速 0.3 秒。'},
   whetstone:{job:'warden',name:'独锋砥石',style:'寻找单挑',tip:'一刀只砍中 1 个敌人时，伤害提高 25%。'},

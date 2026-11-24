@@ -10,6 +10,7 @@ export class MartialRig {
   private walkFacing:Facing='front';
   private facing:Facing='front';
   private attack=1; private wound=0; private stride=0;
+  private heavySwing=false;
   private recoilX=0; private recoilY=0;
   private tip=new Phaser.Math.Vector2();
   private bank:number;
@@ -23,13 +24,15 @@ export class MartialRig {
   cast(dx:number,dy:number){
     if(this.attack<.14 || this.wound>.13)return;
     this.facing=facingFromVector(dx,dy,this.facing);
+    this.heavySwing=false;
     this.attack=0;
   }
+  cleave(){this.heavySwing=true;}
   hurt(dx:number,dy:number){
     const n=Math.hypot(dx,dy)||1;
     this.recoilX=dx/n;this.recoilY=dy/n;this.wound=.28;
   }
-  update(dt:number,moving:boolean,angle:number,invincible:boolean,seconds:number,dash=0){
+  update(dt:number,moving:boolean,angle:number,invincible:boolean,seconds:number,dash=0,heavyReady=false){
     this.attack+=dt;this.wound=Math.max(0,this.wound-dt);
     if(moving){
       this.stride+=dt*44;
@@ -46,7 +49,13 @@ export class MartialRig {
     else if(this.attack<.065)upperPose=3;
     else if(this.attack<.15)upperPose=4;
     else if(this.attack<.22)upperPose=1;
-    const top=this.bank+bankRow(this.facing)*30+24+upperPose;
+    const view=bankRow(this.facing);
+    let top=this.bank+view*30+24+upperPose;
+    if(this.wound<=.09 && this.bank===90){
+      const heavyBank=180+view*3;
+      if(this.heavySwing && this.attack<.24)top=heavyBank+(this.attack<.09?1:2);
+      else if(heavyReady && this.attack>=.15)top=heavyBank;
+    }
     if(Number(this.feet.frame.name)!==legs)this.feet.setFrame(legs);
     if(Number(this.figure.frame.name)!==top)this.figure.setFrame(top);
     const recoil=(this.wound/.28)**2;

@@ -25,6 +25,7 @@ export class WitchRig {
   private readonly sideGrip: Image;
   private readonly shaft: Image;
   private readonly fingers: Image;
+  private readonly lens: Phaser.GameObjects.Graphics;
   private shaftProjection=1;
   private aimX=0;
   private readonly tip = new Phaser.Math.Vector2();
@@ -91,6 +92,12 @@ export class WitchRig {
     this.sideGrip=gripPart(this.wand,2,18);
     this.shaft=gripPart(this.wand,5,18);
     this.fingers=gripPart(this.wand,6,18);
+    this.lens=scene.add.graphics().setVisible(false);
+    this.lens.lineStyle(1.25,0x664932).strokeEllipse(0,0,9,11);
+    this.lens.fillStyle(0xa26a3b,1).fillEllipse(0,0,7,9);
+    this.lens.fillStyle(0xf3ca78,1).fillTriangle(-2,2,0,-4,3,0);
+    this.lens.lineStyle(1,0xffe2a1).lineBetween(-5,0,-7,1).lineBetween(4,-3,6,-5);
+    this.wand.add(this.lens);
 
     this.head = joint(this.chest,-.5,1.7);
     this.face = skin(this.head,'head',28.5,.5,.90,palette);
@@ -149,7 +156,7 @@ export class WitchRig {
     this.castTime = 0;
   }
 
-  update(dt: number, moving: boolean, angle: number, invincible: boolean, seconds: number, dashTime=0) {
+  update(dt: number, moving: boolean, angle: number, invincible: boolean, seconds: number, dashTime=0,focused=false) {
     this.speed += ((moving ? 1 : 0)-this.speed)*(1-Math.exp(-dt*16));
     this.phase += dt*(2+this.speed*9);
     this.castTime += dt;
@@ -188,6 +195,11 @@ export class WitchRig {
     this.head.rotation = -this.chest.rotation*.45-this.recoilX*recoil*.11;
     this.head.y=1.7+recoil*2+lunge*.7;
     this.freeArm.rotation = (this.freeArm.x>0 ? -.12 : .12) - step*.14;
+    this.lens.visible=focused && this.carriesStaff;
+    if(focused){
+      this.head.rotation-=.055;
+      this.freeArm.rotation+=(this.freeArm.x>0?-.16:.16);
+    }
 
     const t = this.castTime;
     // The spell is already live on cast. Hold the pointing pose through its
@@ -200,6 +212,7 @@ export class WitchRig {
     this.freeArm.y=6+((front||rear)?step*1.45:0);
     if(front||rear){
       this.verticalCast(front,stroke,step,recoil,lunge);
+      this.lens.setPosition(.4,-16.75*this.shaftProjection);
       return;
     }
     const dx = (far ? 7.5 : 8.2) + stroke*2.8;
@@ -210,6 +223,7 @@ export class WitchRig {
     const rest = .96;
     const attack = Math.PI/2 + Phaser.Math.Clamp(this.aim,-.8,.8);
     this.wand.rotation = rest + (attack-rest)*stroke - this.joints.shoulder-this.joints.elbow;
+    this.lens.setPosition(.4,-16.75);
   }
 
   private verticalCast(front:boolean,stroke:number,step:number,recoil:number,lunge:number){

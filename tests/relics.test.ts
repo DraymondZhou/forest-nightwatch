@@ -18,8 +18,11 @@ describe('one binding per miniboss victory',()=>{
     expect(relicsFor('hunter')).toEqual(['longfeather','quicknock']);
   });
   it('distinguishes standing focus from leaving fire on a dash',()=>{
-    const still=arena('stillglass');for(let i=0;i<21;i++)still.step(.05,idle);
-    expect(still.power).toBe(1.25);still.step(.02,{x:1,y:0});expect(still.power).toBe(1);
+    const still=arena('stillglass');Object.assign(still,{spawnClock:100});for(let i=0;i<21;i++)still.step(.05,idle);
+    expect(still.focus).toBe(1);still.step(.02,{x:1,y:0});expect(still.focus).toBe(1);
+    const target=still.spawn('brute',still.player.x+75,still.player.y)!;
+    still.step(.016,idle);expect(still.focus).toBe(0);
+    expect(target.maxHp-target.hp).toBeCloseTo((18+3)*1.25);
     const wick=arena('waywick');wick.build={};const p={...wick.player};
     const foe=wick.spawn('beetle',p.x-15,p.y)!;wick.step(.05,{x:1,y:0,dash:true});
     const z=wick.zones.find(z=>z.kind==='ember')!;expect(z.x).toBe(p.x);expect(foe.hp).toBeLessThan(foe.maxHp);

@@ -33,8 +33,13 @@ function figure(ward,view,frame,layer,legPhase=0){const side=view===1,back=view=
  const legs=leg(64-(side?2:hip),-stride,side,true,ward)+leg(64+(side?2:hip),stride,side,false,ward);
  const shoulders=[side?-3:-9,side?5:9],core=at(0,0,body(ward,side,back)),head=at(side?1:0,-7,ward?helmet(side,back,hurt):hoodHead(side,back,hurt));
  let rear='',front='';
- if(ward){const a=[shoulders[0],2],b=[shoulders[1],2],h=atk?(side?[[5,8],[9,-3],[15,2],[12,10]]:[[-8,8],[-14,-1],[-2,2],[3,12]])[t]:[side?6:-13,13+stride];const sh=[side?9:13,hurt?5:12-stride*.7];
- const blade=at(...h,rot((atk?(side?[-28,-57,64,112]:[-40,-69,36,90])[t]:(side?24:-16))*(back?-1:1),sword));
+ const heavy=ward&&frame>=12&&frame<=14;
+ if(ward){const a=[shoulders[0],2],b=[shoulders[1],2];
+ const h=heavy?(side?[[-5,13],[17,5],[12,16]]:[[-13,13],[-1,3],[5,12]])[frame-12]
+   :atk?(side?[[5,8],[9,-3],[15,2],[12,10]]:[[-8,8],[-14,-1],[-2,2],[3,12]])[t]:[side?6:-13,13+stride];
+ const sh=[side?9:13,heavy?7:hurt?5:12-stride*.7];
+ const bladeAngle=heavy?(side?[-128,85,127]:[-118,72,116])[frame-12]:atk?(side?[-28,-57,64,112]:[-40,-69,36,90])[t]:(side?24:-16);
+ const blade=at(...h,rot(bladeAngle*(back?-1:1),sword));
  const attack=arm(a,h,true,false,-1)+blade+hand(h);const guard=arm(b,sh,true,true,-1)+at(...sh,g('scale('+(side?.8:1)+' 1)',shield));rear=back?attack:guard;front=back?guard:attack;
  }else{const aim=atk?(side?-8:back?-48:36):22;const bh=side?(atk?[21,3]:[12,12]):(atk?[13,5]:[11,14]);const d=atk?[-1,6,1,-2][t]:0;const rad=aim*Math.PI/180,nock=[bh[0]-(7+d)*Math.cos(rad),bh[1]-(7+d)*Math.sin(rad)];const pull=atk&&t<2?nock:side?(atk?[4,2]:[1,12]):(atk?[-2,5]:[-5,14]);
  const bow=at(...bh,rot(aim,p('M-5 -22Q5 -12 1 0Q5 12 -5 22Q1 12 -1 1Q1 -12 -5 -22Z','#c69458',1.0)+l('M-5 -22L'+(-7-d)+' 0 -5 22','#e6d5a0',.9)));
@@ -45,7 +50,8 @@ function figure(ward,view,frame,layer,legPhase=0){const side=view===1,back=view=
  const carry=!ward?at(side?-9:back?-6:-12,10,rot(-42,quiver)):'';
  const torso=(back?'':carry)+rear+core+(back?carry:'')+front+head;
  if(layer==='legs')return legs;
- return (layer==='torso'?'':legs)+at(64+(hurt?-1:0),51+bob,rot((hurt?-7:quiet?0:stride)*.8,torso))}
+ const lean=heavy?[-6,8,5][frame-12]*(back?-1:1):(hurt?-7:quiet?0:stride)*.8;
+ return (layer==='torso'?'':legs)+at(64+(hurt?-1:0),51+bob+(heavy?2:0),rot(lean,torso))}
 async function bakeMotion(){
  // Keep the hunter's original frame numbers; append the sword and shield bank.
  const columns=12,layers=[];
@@ -53,7 +59,11 @@ async function bakeMotion(){
    const index=(ward?90:0)+view*30+slot,body=slot>=24;
    layers.push({input:svg(figure(ward,view,body?[11,6,7,8,9,10][slot-24]:0,body?'torso':'legs',slot)),left:index%columns*128,top:Math.floor(index/columns)*128});
  }
- await sharp({create:{width:columns*128,height:15*128,channels:4,background:'#00000000'}}).composite(layers).png({palette:true,colours:192}).toFile(path.join(dest,'hunter-motion.png'));
+ for(let view=0;view<3;view++)for(let i=0;i<3;i++){
+   const index=180+view*3+i;
+   layers.push({input:svg(figure(true,view,12+i,'torso')),left:index%columns*128,top:Math.floor(index/columns)*128});
+ }
+ await sharp({create:{width:columns*128,height:16*128,channels:4,background:'#00000000'}}).composite(layers).png({palette:true,colours:192}).toFile(path.join(dest,'hunter-motion.png'));
 }
 (async()=>{await bakeMotion();if(process.argv.includes('--hunter-only')||process.argv.includes('--motion-only'))return;const layers=[];for(let role=0;role<2;role++)for(let view=0;view<3;view++)for(let f=0;f<12;f++)layers.push({input:svg(figure(!role,view,f)),left:f*128,top:(role*3+view)*128});
  await sharp({create:{width:1536,height:768,channels:4,background:'#00000000'}}).composite(layers).png({palette:true,colours:192}).toFile(path.join(dest,'martial-heroes.png'));

@@ -45,20 +45,38 @@ function treeRelics(v,wounded){
  const bell=(x,y,side)=>g(x,y,1,rotate(step*5+side*prep*13-release*12,0,0,lines('M0 0Q2 7 1 12','#63513d',1.5)+p('M-4 13L0 10L4 12L6 17L4 18L4 24L0 27L-4 25L-5 19L-7 18Z','#4a5140',1.25)+p('M-3 17L0 15L3 16L3 22L0 24L-3 22Z',wounded?'#ffbc73':'#d9c382')+lines('M0 16L0 23','#82664d',1)));
  return group('translate('+(-recoil*.9)+' '+(step*.7+prep*1.9-release*2)+')',crown+moss+burst+shroom(38,38,.8)+shroom(44,33,.65)+shroom(85,44,.65)+bell(28,60,-1)+bell(95,57,1)+core+ring);
 }
-function svg(s){return Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">'+s+'</svg>');}
+function svg(shape,pixels=128){
+  return Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+pixels+'" height="'+pixels+'" viewBox="0 0 128 128">'+shape+'</svg>');
+}
 async function bake(){
- const frames=[];const existing=path.join(art,'enemy-poses.png');
- for(let bank=0;bank<6;bank++)for(let i=0;i<24;i++){
-  const kind=bank%3,wounded=bank>=3,v=pose(i);let tile;
-  if(kind<2){const body=kind===0?boar(i):moth(i),details=kind===0?boarMantle(v,wounded):mothRegalia(v,wounded);
-    tile=await sharp(svg(group('translate(4 4) scale(.9375)',body+details))).png().toBuffer();}
-  else {let src=sharp(existing).extract({left:i%12*128,top:(14+Math.floor(i/12))*128,width:128,height:128});
-    if(wounded)src=src.modulate({brightness:.83,saturation:.8,hue:343});
-    // Strip foliage from the crown's right side, revealing the bare fork beneath it.
-    const layers=wounded?[{input:svg(p('M77 0H128V57L107 54L105 49L97 52L92 47L90 51L85 46L81 49L82 41L77 43L80 35L76 33L79 26Z','#fff')),blend:'dest-out'}]:[];
-    tile=await src.composite([...layers,{input:svg(treeRelics(v,wounded))}]).png().toBuffer();}
-  frames.push({input:tile,left:i%12*128,top:(bank*2+Math.floor(i/12))*128});
- }
- await sharp({create:{width:1536,height:1536,channels:4,background:'#0000'}}).composite(frames).png({palette:true,colours:220,effort:9,dither:0}).toFile(path.join(art,'mini-bosses.png'));
+  const small=[];
+  for(let bank=0;bank<4;bank++)for(let i=0;i<24;i++){
+    const v=pose(i),wounded=bank>=2;
+    const shape=bank%2===0?boar(i)+boarMantle(v,wounded):moth(i)+mothRegalia(v,wounded);
+    const tile=await sharp(svg(group('translate(4 4) scale(.9375)',shape))).png().toBuffer();
+    small.push({input:tile,left:(i%12)*128,top:(bank*2+Math.floor(i/12))*128});
+  }
+  await sharp({create:{width:1536,height:1024,channels:4,background:'#0000'}}).composite(small).png({palette:true,colours:220,effort:9,dither:0}).toFile(path.join(art,'mini-bosses.png'));
+  const treeBody=require('./tree-body.cjs'),meta={frames:{},meta:{scale:'1'}},layers=[];
+  // Trim gutters independently, retaining a common 256px animation origin in Phaser.
+  let x=0,y=0,rowHeight=0,width=0;
+  for(let index=0;index<48;index++){
+    const v=pose(index%24),wounded=index>=24;
+    const raw=await sharp(svg(treeBody(v,wounded)+treeRelics(v,wounded),512)).resize(256,256).png().toBuffer();
+    const tile=await sharp(raw).trim({threshold:0}).png().toBuffer({resolveWithObject:true});
+    const info=tile.info,w=info.width,h=info.height;
+    if(x+w+1>2048){x=0;y+=rowHeight+2;rowHeight=0;}
+    const left=x+1,top=y+1;
+    layers.push({input:tile.data,left,top});
+    meta.frames[index]={frame:{x:left,y:top,w,h},rotated:false,trimmed:true,
+      spriteSourceSize:{x:-(info.trimOffsetLeft||0),y:-(info.trimOffsetTop||0),w,h},sourceSize:{w:256,h:256}};
+    x+=w+2;rowHeight=Math.max(rowHeight,h);width=Math.max(width,x);
+  }
+  const height=y+rowHeight+2;
+  if(height>2048)throw Error('Guardian sheet exceeds mobile texture budget');
+  const indexed=await sharp({create:{width,height,channels:4,background:'#0000'}}).composite(layers)
+    .png({palette:true,colours:120,dither:0,effort:9}).toBuffer();
+  await sharp(indexed).webp({lossless:true,effort:6}).toFile(path.join(art,'ancient-tree.webp'));
+  require('node:fs').writeFileSync(path.join(__dirname,'../src/ancient-tree.json'),JSON.stringify(meta)+'\n');
 }
 bake().catch(e=>{console.error(e);process.exitCode=1;});

@@ -3,6 +3,7 @@ import type {WeaponId} from './content';
 export class AudioDirector {
   private ctx?:AudioContext; private master?:GainNode;private timer?:ReturnType<typeof setInterval>;private step=0;private lastHit=0;
   private hurtSample?:AudioBuffer;
+  private lastIgnition=-1000;
   private hurtVolume?:GainNode;
   music=.3;sound=.5;paused=true;combat=false;
   async start(){
@@ -25,13 +26,25 @@ export class AudioDirector {
   gather(){
     if(this.sound>0)this.tone(810,.075,this.sound*.06,'sine',1190);
   }
-  impact(heavy:boolean,weapon?:WeaponId){
+  heavySwing(){
+    this.tone(128,.13,this.sound*.14,'triangle',55);
+  }
+  igniteArrow(){
     const now=performance.now();
-    if(now-this.lastHit<(heavy?70:110))return;
+    if(now-this.lastIgnition<180)return;
+    this.lastIgnition=now;
+    this.tone(850,.045,this.sound*.055,'triangle',350);
+  }
+  impact(heavy:boolean,weapon?:WeaponId,empowered=false){
+    const now=performance.now();
+    if(now-this.lastHit<(empowered?45:heavy?70:110))return;
     this.lastHit=now;
     this.tone(heavy?180:390,heavy?.105:.048,this.sound*(heavy?.16:.09),'triangle',heavy?58:130);
     if(weapon==='blade')this.tone(heavy?1180:1490,.052,this.sound*.075,'triangle',335);
-    else if(weapon==='bow')this.tone(193,.055,this.sound*.10,'sine',64);
+    else if(weapon==='bow'){
+      this.tone(193,.055,this.sound*.10,'sine',64);
+      if(empowered)this.tone(1370,.08,this.sound*.074,'triangle',660);
+    }
     else if(weapon==='spark')this.tone(940,.035,this.sound*.048,'square',310);
     else if(weapon==='frost'||weapon==='comet')this.tone(1220,.105,this.sound*.085,'sine',780);
     else if(weapon==='ember')this.tone(104,.13,this.sound*.15,'triangle',46);

@@ -1,12 +1,17 @@
 // From the project root: node scripts/measure-waves.cjs . local normal,hard read
-// Optional policies: alternate (second relic set), queue (two automatic ranks), cache (chest detour).
+// To measure idle-to-first-cast latency: node scripts/measure-waves.cjs . local first-shot
+// Optional flags: alternate (second relic set), queue (two automatic ranks), cache (chest detour),
+// expanded (12 fixed seeds including distinct formation directions), paths=fern,breaker (focused rerun),
+// bloom (step just inside a mature field covering a chief when playing Fern).
 const fs=require('node:fs'),path=require('node:path'),{Worker,isMainThread,workerData,parentPort}=require('node:worker_threads');
 const out=path.resolve(__dirname,'../work/balance');
 const paths=['hazel','fern','ash','guard','breaker','sniper','volley'];
-const seeds=[56,207,78,33,90,11]; const modes=['easy','normal','hard'];
+const seeds=[56,207,78,33,90,11];
+if(process.argv.slice(6).includes('expanded'))seeds.push(4621,13738,21175,35864,46083,58292);
+const modes=['easy','normal','hard'];
 const rank={hazel:['spark','spore','power','haste','ember','vigor','leaf'],fern:['spore','spark','vigor','haste','leaf','power','ember'],ash:['ember','leaf','power','haste','vigor','spark']};
 function observeIncomingDamage(sim) {
-  const minutes=Array.from({length:8},()=>({hits:0,hpLost:0}));
+  const minutes=Array.from({length:8},()=>({hits:0,hpLost:0,samples:0,nearbyEnemies:0,nearbyMissiles:0}));
   const recent=[];
   const hurt=sim.hurt;
   sim.hurt=function(amount,x,y,kind='contact'){
@@ -27,7 +32,7 @@ function observeIncomingDamage(sim) {
 function play(C,pathId,seed,mode,readWarnings){
  const s=new C(pathId,seed,mode),melee=s.path.job==='warden',priority=rank[pathId]??(melee?['blade','leaf','power','haste','vigor','stride']:['bow','ember','power','haste','vigor','stride']);
  const incoming=observeIncomingDamage(s);
- let upgradeChoices=0,firstRecovery=null,cachesClaimed=0;
+ let upgradeChoices=0,firstRecovery=null,cachesClaimed=0,finalBossBlooms=0;
  // Resolve the stomp before measuring subsequent damage in the same tick.
  const resolveWarning=s.resolveWarning;
  s.resolveWarning=function(z){
@@ -77,8 +82,16 @@ function play(C,pathId,seed,mode,readWarnings){
   if(!lateBuild&&s.seconds>=350)lateBuild={level:s.level,build:{...s.build},talent:s.classTalent};
   const phase=s.seconds*.30,boss=s.boss;
   const landmark=workerData.cache && s.cacheSite?s.cacheSite:s.shrine;
-  const x=landmark?.x??((boss?.x??900)+(boss?(melee?108:150):470)*Math.cos(phase));
-  const y=landmark?.y??((boss?.y??600)+(boss?(melee?108:130):300)*Math.sin(phase));
+  let x=landmark?.x??((boss?.x??900)+(boss?(melee?108:150):470)*Math.cos(phase));
+  let y=landmark?.y??((boss?.y??600)+(boss?(melee?108:130):300)*Math.sin(phase));
+  if(workerData.bloom && pathId==='fern' && s.masteryActive && boss && !landmark){
+    const field=s.zones.find(z=>z.kind==='spore' && !z.bloomed && z.timer>=.85 && z.life>.5
+      && Math.hypot(boss.x-z.x,boss.y-z.y)<=z.radius+boss.radius);
+    if(field){
+      const edge=Math.min(1,(field.radius-8)/Math.max(1,Math.hypot(s.player.x-field.x,s.player.y-field.y)));
+      x=field.x+edge*(s.player.x-field.x);y=field.y+edge*(s.player.y-field.y);
+    }
+  }
   const distance=Math.max(1,Math.hypot(x-s.player.x,y-s.player.y));
   let dx=(x-s.player.x)/distance,dy=(y-s.player.y)/distance,danger=false;
   for(const e of s.enemies){
@@ -102,6 +115,17 @@ function play(C,pathId,seed,mode,readWarnings){
   }}
   const previousRerolls=s.rerolls;
   s.step(1/60,{x:dx,y:dy,dash:danger&&s.dashCooldown<=0});
+  if(pathId==='fern' && boss?.kind==='boss'){
+    finalBossBlooms+=s.effects.filter(e=>e.kind==='bloom' && Math.hypot(e.x-boss.x,e.y-boss.y)<=e.radius+boss.radius).length;
+  }
+  if(tick%60===0){
+    // Sample nearby, living threats once per simulated second at the player's current position.
+    const near=e=>(s.player.x-e.x)**2+(s.player.y-e.y)**2<=180**2;
+    const minute=incoming.minutes[Math.min(7,Math.floor(s.seconds/60))];
+    minute.samples++;
+    for(const enemy of s.enemies)if(enemy.hp>0 && near(enemy))minute.nearbyEnemies++;
+    for(const shot of s.shots)if(shot.weapon==='enemy' && near(shot))minute.nearbyMissiles++;
+  }
   if(s.rerolls>previousRerolls)cachesClaimed++;
   for(const {e,rec} of active){
     if(e.hp<e.maxHp && rec.firstHit===null)rec.firstHit=s.seconds;
@@ -125,9 +149,31 @@ function play(C,pathId,seed,mode,readWarnings){
  }
  for(const {e,rec} of active){rec.remaining=Math.max(0,e.hp)/e.maxHp;rec.attacks=actions.get(e.id)?.count??0;}
  return {seed,mode,pathId,won:s.won,seconds:s.seconds,level:s.level,kills:s.kills,bosses:records,phases,windows,wave:lateWave(),
-   upgradeChoices,firstRecovery,cachesClaimed,shrinesLit:s.shrinesLit,damageByMinute:incoming.minutes,fatalSequence:s.fatal?incoming.recent:null};
+   upgradeChoices,firstRecovery,cachesClaimed,finalBossBlooms,shrinesLit:s.shrinesLit,damageByMinute:incoming.minutes,fatalSequence:s.fatal?incoming.recent:null};
 }
 function median(arr){let a=arr.sort((x,y)=>x-y);if(!a.length)return '-';return ((a[Math.floor((a.length-1)/2)]+a[Math.floor(a.length/2)])/2).toFixed(1);}
+function openingResponse(Combat){
+  const idle={x:0,y:0};
+  return paths.map(pathId=>{
+    const delays=[];
+    // Vary target-entry phase over two empty seconds. Count to cast, excluding projectile travel.
+    for(let phase=1;phase<=120;phase++){
+      const s=new Combat(pathId,56,'normal');
+      s.spawnClock=s.eliteClock=999;
+      for(let n=0;n<phase;n++)s.step(1/60,idle);
+      const enemy=s.spawn('slime',s.player.x+60,s.player.y);
+      enemy.speed=0;
+      for(let ticks=1;ticks<=240;ticks++){
+        s.step(1/60,idle);
+        if(s.effects.some(e=>e.kind==='cast'&&e.weapon===s.path.weapon)){
+          delays.push(ticks*1000/60);
+          break;
+        }
+      }
+    }
+    return {pathId,castCount:delays.length,entryPhases:120,medianMs:median(delays),maxMs:delays.length?Math.max(...delays).toFixed(1):null};
+  });
+}
 function lines(label,rows){const bosses=rows.flatMap(r=>r.bosses),enc=b=>{const reached=bosses.filter(b);const dead=reached.filter(r=>r.dead!==null);return [dead.length+'/'+reached.length,median(dead.map(r=>r.dead-r.spawn)),median(dead.map(r=>r.dead-r.firstHit))].join(' ');};return [label,rows.filter(r=>r.won).length+'/'+rows.length,enc(b=>b.kind!=='boss'),enc(b=>b.kind==='boss')].join(' | ');}
 async function main(){const root=path.resolve(process.argv[2]||'.'),tag=process.argv[3]||'local';fs.mkdirSync(out,{recursive:true});if(!/^[\w.-]+$/.test(tag||''))throw Error('tag required');
  // A previously generated bundle runs the same observer against the exact old rules.
@@ -136,13 +182,20 @@ async function main(){const root=path.resolve(process.argv[2]||'.'),tag=process.
  if(!prebuilt)require('esbuild').buildSync({entryPoints:[path.join(root,'src/combat.ts')],platform:'node',format:'cjs',bundle:true,outfile:file});
  const {Combat}=require(file),hp={};for(const m of modes){hp[m]={};for(const sec of [0,60,180,360]){const s=new Combat('hazel',56,m);s.seconds=sec;hp[m][sec]=Object.fromEntries(['slime','twig','brute','boar','mothQueen','boss'].map(k=>[k,Math.round(s.spawn(k).maxHp)]));}}
  const selected=process.argv[4]?process.argv[4].split(','):modes;
+ if(selected.length===1 && selected[0]==='first-shot'){
+   const report=JSON.stringify(openingResponse(Combat),null,2);
+   fs.writeFileSync(path.join(out,'first-shot-'+tag+'.json'),report);console.log(report);return;
+ }
  const flags=process.argv.slice(6);
- const policy={readWarnings:process.argv[5]==='read',alternate:flags.includes('alternate'),queue:flags.includes('queue'),cache:flags.includes('cache')};
+ const pathFlag=flags.find(flag=>flag.startsWith('paths='));
+ const selectedPaths=pathFlag?pathFlag.slice(6).split(','):paths;
+ if(selectedPaths.some(id=>!paths.includes(id)))throw Error('Unknown path in '+pathFlag);
+ const policy={readWarnings:process.argv[5]==='read',alternate:flags.includes('alternate'),queue:flags.includes('queue'),cache:flags.includes('cache'),bloom:flags.includes('bloom')};
  const rows=(await Promise.all(selected.map(mode=>new Promise((res,rej)=>{
-   const w=new Worker(__filename,{workerData:{mode,file,...policy}});
+   const w=new Worker(__filename,{workerData:{mode,file,seeds,selectedPaths,...policy}});
    w.once('message',res);w.once('error',rej);w.once('exit',c=>{if(c)rej(Error('worker '+c));});
  })))).flat();
- const result={tag,seeds,policy,hp,rows};fs.writeFileSync(path.join(out,'chief-'+tag+'.json'),JSON.stringify(result));const report=['group | wins | mini kills/encounters median spawn-to-death / first-hit-to-death (s) | final kills/encounters median spawn-to-death / first-hit-to-death (s)',...selected.map(m=>lines(m,rows.filter(r=>r.mode===m))),...paths.map(p=>lines('hard '+p,rows.filter(r=>r.mode==='hard'&&r.pathId===p)))].join('\n');fs.writeFileSync(path.join(out,'chief-'+tag+'.txt'),report);console.log(report);
+ const result={tag,seeds,policy,selectedPaths,hp,rows};fs.writeFileSync(path.join(out,'chief-'+tag+'.json'),JSON.stringify(result));const report=['group | wins | mini kills/encounters median spawn-to-death / first-hit-to-death (s) | final kills/encounters median spawn-to-death / first-hit-to-death (s)',...selected.map(m=>lines(m,rows.filter(r=>r.mode===m))),...selectedPaths.map(p=>lines('hard '+p,rows.filter(r=>r.mode==='hard'&&r.pathId===p)))].join('\n');fs.writeFileSync(path.join(out,'chief-'+tag+'.txt'),report);console.log(report);
  for(const mode of selected){
    const group=rows.filter(r=>r.mode===mode);
    const recoveries=group.flatMap(r=>r.firstRecovery?[r.firstRecovery]:[]);
@@ -156,9 +209,14 @@ async function main(){const root=path.resolve(process.argv[2]||'.'),tag=process.
    }
    const damageByMinute=Array.from({length:8},(_,i)=>{
      const observed=group.reduce((sum,r)=>sum+Math.max(0,Math.min(60,r.seconds-i*60)),0);
-     const hpLost=group.reduce((sum,r)=>sum+r.damageByMinute[i].hpLost,0);
-     return {minute:i+1,runs:group.filter(r=>r.seconds>i*60).length,observedSeconds:Math.round(observed),
-       hpLostPer60Seconds:observed?Number((60*hpLost/observed).toFixed(1)):null};
+     const totals=group.reduce((sum,r)=>{
+       const period=r.damageByMinute[i];for(const key of Object.keys(sum))sum[key]+=period[key];
+       return sum;
+     },{hits:0,hpLost:0,samples:0,nearbyEnemies:0,nearbyMissiles:0});
+     const mean=count=>totals.samples?Number((count/totals.samples).toFixed(2)):null;
+     return {minute:i+1,runs:group.filter(r=>r.seconds>i*60).length,observedSeconds:Number(observed.toFixed(3)),
+       hits:totals.hits,hpLostPer60Seconds:observed?Number((60*totals.hpLost/observed).toFixed(1)):null,
+       threatSamples:totals.samples,meanNearbyEnemies:mean(totals.nearbyEnemies),meanNearbyMissiles:mean(totals.nearbyMissiles)};
    });
    const diagnostics={mode,damageByMinute,upgradeChoicesInWins:median(group.filter(r=>r.won).map(r=>r.upgradeChoices)),
      firstStompWindowsWithDamage:recoveries.filter(r=>r.damage>0).length,firstStompsObserved:recoveries.length,
@@ -167,4 +225,4 @@ async function main(){const root=path.resolve(process.argv[2]||'.'),tag=process.
    console.log(diagnostics);
    for(const m of [3,5,7]){let t=0,f=0,fast=0;for(const r of group){const w=r.windows[m];t+=w.touched;f+=w.first;fast+=w.fast;}console.log(mode,m+'m',{touched:t,oneHit:f,within300ms:fast});}
  }}
-if(isMainThread)main().catch(e=>{console.error(e);process.exitCode=1});else{const {Combat}=require(workerData.file);parentPort.postMessage(paths.flatMap(p=>seeds.map(seed=>play(Combat,p,seed,workerData.mode,workerData.readWarnings))));}
+if(isMainThread)main().catch(e=>{console.error(e);process.exitCode=1});else{const {Combat}=require(workerData.file);parentPort.postMessage(workerData.selectedPaths.flatMap(p=>workerData.seeds.map(seed=>play(Combat,p,seed,workerData.mode,workerData.readWarnings))));}
